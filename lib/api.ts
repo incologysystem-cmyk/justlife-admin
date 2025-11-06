@@ -10,6 +10,8 @@ import type {
   ServiceStatus,
 } from "@/types/catalog";
 import type { Category } from "@/types/catalog";
+import { cookies } from "next/headers";
+
 
 
 
@@ -103,6 +105,16 @@ export type CategoryWithServices = {
   category: Category;
   services: ServiceLite[];
 };
+
+
+
+function getBaseUrl() {
+  return (
+    process.env.API_BASE?.replace(/\/$/, "") ||
+    process.env.NEXT_PUBLIC_API_BASE?.replace(/\/$/, "") ||
+    "http://localhost:5000"
+  );
+}
 
 
 export type CreateCategoryPayload = { name: string; icon?: string; sort?: number; active?: boolean; slug?: string; tags?: string[] };
@@ -488,25 +500,87 @@ export async function fetchService(idOrSlug: string): Promise<Service> {
 
 
 
+/** ----------------------
+ *  Bookings (server/client-safe)
+ *  ---------------------- */
 
+export async function fetchBookings(opts?: { token?: string }): Promise<any[]> {
+  const isServer = typeof window === "undefined";
 
+  if (isServer) {
+    const res = await fetch(`${getBaseUrl()}/api/bookings`, {
+      method: "GET",
+      headers: {
+        Accept: "application/json",
+        ...(opts?.token ? { Authorization: `Bearer ${opts.token}` } : {}),
+      },
+      cache: "no-store",
+    });
 
-// ----------------------
-// Bookings
-// ----------------------
-export async function fetchBookings(): Promise<Booking[]> {
-  await sleep(80);
-  const today = new Date();
-  return [
-    { id: "b1", date: today.toISOString(), title: "Sofa cleaning · 10:00", status: "confirmed" },
-    {
-      id: "b2",
-      date: new Date(today.getFullYear(), today.getMonth(), today.getDate() + 3).toISOString(),
-      title: "Mattress cleaning · 14:00",
-      status: "pending",
-    },
-  ];
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(`Failed to fetch bookings: ${text}`);
+    }
+    const data = await res.json();
+    return data.items ?? data.data ?? [];
+  }
+
+  // client → hit Next proxy so browser cookies flow automatically
+  const res = await fetch(`/api/admin/bookings`, {
+    method: "GET",
+    headers: { Accept: "application/json" },
+    credentials: "include",
+    cache: "no-store",
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Failed to fetch bookings: ${text}`);
+  }
+  const json = await res.json();
+  return json.data?.items ?? json.data ?? [];
 }
+
+export async function fetchBookingById(
+  id: string,
+  opts?: { token?: string }
+): Promise<any> {
+  const isServer = typeof window === "undefined";
+
+  if (isServer) {
+    const res = await fetch(`${getBaseUrl()}/api/bookings/${encodeURIComponent(id)}`, {
+      method: "GET",
+      headers: {
+        Accept: "application/json",
+        ...(opts?.token ? { Authorization: `Bearer ${opts.token}` } : {}),
+      },
+      cache: "no-store",
+    });
+
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(`Failed to fetch booking ${id}: ${text}`);
+    }
+    const data = await res.json();
+    return data.booking ?? data.data ?? null;
+  }
+
+  const res = await fetch(`/api/admin/bookings/${encodeURIComponent(id)}`, {
+    method: "GET",
+    headers: { Accept: "application/json" },
+    credentials: "include",
+    cache: "no-store",
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Failed to fetch booking ${id}: ${text}`);
+  }
+  const json = await res.json();
+  return json.data?.booking ?? json.data ?? null;
+  }
+
+
 
 // ----------------------
 // Customers
