@@ -10,7 +10,9 @@ import type {
   ServiceStatus,
 } from "@/types/catalog";
 import type { Category } from "@/types/catalog";
-import { cookies } from "next/headers";
+import { withOrigin } from "@/lib/url";
+import { withServerCookies } from "@/lib/url";
+
 
 
 
@@ -108,13 +110,9 @@ export type CategoryWithServices = {
 
 
 
-function getBaseUrl() {
-  return (
-    process.env.API_BASE?.replace(/\/$/, "") ||
-    process.env.NEXT_PUBLIC_API_BASE?.replace(/\/$/, "") ||
-    "http://localhost:5000"
-  );
-}
+
+
+
 
 
 export type CreateCategoryPayload = { name: string; icon?: string; sort?: number; active?: boolean; slug?: string; tags?: string[] };
@@ -129,6 +127,8 @@ const sleep = (ms: number) => new Promise((res) => setTimeout(res, ms));
 // Shared Types (exports)
 // ----------------------
 export type OrderStatus = "pending" | "confirmed" | "assigned" | "completed" | "cancelled";
+
+export type BookingItem = any;
 
 export type Order = {
   id: string;
@@ -504,67 +504,67 @@ export async function fetchService(idOrSlug: string): Promise<Service> {
  *  Bookings (server/client-safe)
  *  ---------------------- */
 
-export async function fetchBookings(opts?: { token?: string }): Promise<any[]> {
-  const isServer = typeof window === "undefined";
 
-  if (isServer) {
-    const res = await fetch(`${getBaseUrl()}/api/bookings`, {
-      method: "GET",
-      headers: {
-        Accept: "application/json",
-        ...(opts?.token ? { Authorization: `Bearer ${opts.token}` } : {}),
-      },
+// lib/api.ts
+
+/** ----------------------
+ *  Bookings (server/client-safe)
+ *  ---------------------- */
+
+
+
+export async function fetchBookings(): Promise<BookingItem[]> {
+  if (typeof window !== "undefined") {
+    throw new Error("fetchBookings must be called from the server.");
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15_000);
+
+  try {
+    const url = withOrigin("/api/admin/bookings");
+    const init = await withServerCookies({
       cache: "no-store",
+      headers: {
+        Accept: "application/json, text/plain;q=0.9",
+      },
+      signal: controller.signal,
     });
 
+    const res = await fetch(url, init);
+    const ct = res.headers.get("content-type") ?? "";
+    const isJSON = ct.includes("application/json");
+
+    const body = isJSON ? await res.json().catch(() => ({})) : await res.text().catch(() => "");
+
     if (!res.ok) {
-      const text = await res.text();
-      throw new Error(`Failed to fetch bookings: ${text}`);
+      const message =
+        (isJSON ? (body as any)?.message : undefined) ||
+        (typeof body === "string" && body) ||
+        `HTTP ${res.status}`;
+      throw new Error(message);
     }
-    const data = await res.json();
-    return data.items ?? data.data ?? [];
-  }
 
-  // client → hit Next proxy so browser cookies flow automatically
-  const res = await fetch(`/api/admin/bookings`, {
-    method: "GET",
-    headers: { Accept: "application/json" },
-    credentials: "include",
-    cache: "no-store",
-  });
+    const items =
+      (isJSON && (body as any)?.data?.items) ??
+      (isJSON && (body as any)?.items) ??
+      (isJSON && (body as any)?.data) ??
+      (Array.isArray(body) ? body : []);
 
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`Failed to fetch bookings: ${text}`);
+    if (!Array.isArray(items)) throw new Error("Bad response shape: expected array of bookings.");
+
+    return items as BookingItem[];
+  } catch (err: any) {
+    if (err?.name === "AbortError") {
+      throw new Error("Request timed out while fetching bookings.");
+    }
+    throw new Error(err?.message || "Failed to fetch bookings.");
+  } finally {
+    clearTimeout(timeout);
   }
-  const json = await res.json();
-  return json.data?.items ?? json.data ?? [];
 }
 
-export async function fetchBookingById(
-  id: string,
-  opts?: { token?: string }
-): Promise<any> {
-  const isServer = typeof window === "undefined";
-
-  if (isServer) {
-    const res = await fetch(`${getBaseUrl()}/api/bookings/${encodeURIComponent(id)}`, {
-      method: "GET",
-      headers: {
-        Accept: "application/json",
-        ...(opts?.token ? { Authorization: `Bearer ${opts.token}` } : {}),
-      },
-      cache: "no-store",
-    });
-
-    if (!res.ok) {
-      const text = await res.text();
-      throw new Error(`Failed to fetch booking ${id}: ${text}`);
-    }
-    const data = await res.json();
-    return data.booking ?? data.data ?? null;
-  }
-
+export async function fetchBookingById(id: string): Promise<any> {
   const res = await fetch(`/api/admin/bookings/${encodeURIComponent(id)}`, {
     method: "GET",
     headers: { Accept: "application/json" },
@@ -572,13 +572,93 @@ export async function fetchBookingById(
     cache: "no-store",
   });
 
+  const ct = res.headers.get("content-type") || "";
+  const isJSON = ct.includes("application/json");
+  const data = isJSON ? await res.json().catch(() => ({})) : await res.text();
+
   if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`Failed to fetch booking ${id}: ${text}`);
+    const message =
+      (isJSON ? (data as any)?.message : undefined) ||
+      (typeof data === "string" && data) ||
+      `HTTP ${res.status}`;
+    throw new Error(message);
   }
-  const json = await res.json();
-  return json.data?.booking ?? json.data ?? null;
+
+  return (data as any)?.data?.booking ?? (data as any)?.booking ?? data;
+}
+
+// (optional helpers)
+export async function createBooking(payload: any): Promise<any> {
+  const res = await fetch("/api/admin/bookings", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    credentials: "include",
+    cache: "no-store",
+    body: JSON.stringify(payload),
+  });
+
+  const ct = res.headers.get("content-type") || "";
+  const isJSON = ct.includes("application/json");
+  const data = isJSON ? await res.json().catch(() => ({})) : await res.text();
+
+  if (!res.ok) {
+    const message =
+      (isJSON ? (data as any)?.message : undefined) ||
+      (typeof data === "string" && data) ||
+      `HTTP ${res.status}`;
+    throw new Error(message);
   }
+
+  return (data as any)?.data?.booking ?? (data as any)?.booking ?? data;
+}
+
+export async function updateBooking(id: string, patch: any): Promise<any> {
+  const res = await fetch(`/api/admin/bookings/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    credentials: "include",
+    cache: "no-store",
+    body: JSON.stringify(patch),
+  });
+
+  const ct = res.headers.get("content-type") || "";
+  const isJSON = ct.includes("application/json");
+  const data = isJSON ? await res.json().catch(() => ({})) : await res.text();
+
+  if (!res.ok) {
+    const message =
+      (isJSON ? (data as any)?.message : undefined) ||
+      (typeof data === "string" && data) ||
+      `HTTP ${res.status}`;
+    throw new Error(message);
+  }
+
+  return (data as any)?.data?.booking ?? (data as any)?.booking ?? data;
+}
+
+export async function deleteBooking(id: string): Promise<any> {
+  const res = await fetch(`/api/admin/bookings/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+    headers: { Accept: "application/json" },
+    credentials: "include",
+    cache: "no-store",
+  });
+
+  const ct = res.headers.get("content-type") || "";
+  const isJSON = ct.includes("application/json");
+  const data = isJSON ? await res.json().catch(() => ({})) : await res.text();
+
+  if (!res.ok) {
+    const message =
+      (isJSON ? (data as any)?.message : undefined) ||
+      (typeof data === "string" && data) ||
+      `HTTP ${res.status}`;
+    throw new Error(message);
+  }
+
+  return (data as any)?.success === true ? true : data;
+}
+
 
 
 

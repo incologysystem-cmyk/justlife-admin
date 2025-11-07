@@ -1,11 +1,12 @@
+// lib/serverFetch.ts
 import "server-only";
+import { cookies } from "next/headers";
 
 const API_BASE =
   process.env.API_BASE?.replace(/\/$/, "") ??
   process.env.NEXT_PUBLIC_API_BASE?.replace(/\/$/, "") ??
   "";
 
-// Add optional 'headers' passthrough and NEVER touch cookies here.
 export async function serverFetch<T = any>(
   path: string,
   init: RequestInit = {}
@@ -17,7 +18,28 @@ export async function serverFetch<T = any>(
   const url = /^https?:\/\//i.test(path) ? path : `${API_BASE}${path}`;
   const headers = new Headers(init.headers || {});
 
-  // JSON defaults (unchanged)
+  // ===== Forward cookies + add Bearer token =====
+  const cookieStore = await cookies();
+
+  // 1) Forward ALL cookies unless caller already set a Cookie header
+  if (!headers.has("Cookie")) {
+    const all = cookieStore.getAll();
+    if (all.length) {
+      // Join as a standard Cookie header: name=value; name2=value2; ...
+      headers.set(
+        "Cookie",
+        all.map((c) => `${c.name}=${c.value}`).join("; ")
+      );
+    }
+  }
+
+  // 2) Also set Authorization: Bearer <token> if we have a "token" cookie
+  const tokenCookie = cookieStore.get("token");
+  if (tokenCookie && !headers.has("Authorization")) {
+    headers.set("Authorization", `Bearer ${tokenCookie.value}`);
+  }
+
+  // ===== JSON defaults (unchanged) =====
   const body = init.body as any;
   const isFormData =
     typeof FormData !== "undefined" && body instanceof FormData;
@@ -42,7 +64,7 @@ export async function serverFetch<T = any>(
 
   if (!res.ok) {
     const message =
-      (isJSON ? payload?.message : undefined) ||
+      (isJSON ? (payload as any)?.message : undefined) ||
       (typeof payload === "string" ? payload : "") ||
       `Request failed (${res.status})`;
     const err = new Error(message) as Error & { status?: number; body?: any };
