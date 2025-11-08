@@ -54,7 +54,7 @@ export function Sidebar() {
     <aside className="w-64 bg-sidebar border-r border-border hidden md:flex flex-col">
       <div className="h-16 flex items-center px-4 border-b border-border">
         <Link href={"/" as Route} className="text-xl font-semibold">
-          Justlife Admin
+         Provider Dashboard
         </Link>
       </div>
 

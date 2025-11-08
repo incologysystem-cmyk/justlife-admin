@@ -1,9 +1,10 @@
-// app/api/admin/bookings/[id]/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { serverFetch } from "@/lib/serverFetch";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+const isHex24 = (s: string) => /^[0-9a-fA-F]{24}$/.test(s);
 
 function base() {
   const b =
@@ -22,18 +23,19 @@ function auth(req: NextRequest): HeadersInit {
 }
 
 // GET /api/admin/bookings/:id -> forwards to GET /api/bookings/:id
-export async function GET(
-  req: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   try {
-    const id = params.id;
+    const { id: raw } = await ctx.params;               // <-- await params
+    const id = (raw || "").trim();
+    if (!isHex24(id)) {
+      return NextResponse.json({ ok: false, message: "Invalid booking id" }, { status: 400 });
+    }
+
     const out = await serverFetch<any>(`${base()}/api/bookings/${encodeURIComponent(id)}`, {
       method: "GET",
       headers: { ...auth(req), Accept: "application/json" },
     });
 
-    // Normalize common shapes
     const booking = out?.data?.booking ?? out?.booking ?? out;
     return NextResponse.json({ ok: true, data: { booking } }, { status: 200 });
   } catch (e: any) {
@@ -46,12 +48,14 @@ export async function GET(
 }
 
 // PATCH /api/admin/bookings/:id -> forwards to PATCH /api/bookings/:id
-export async function PATCH(
-  req: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   try {
-    const id = params.id;
+    const { id: raw } = await ctx.params;               // <-- await params
+    const id = (raw || "").trim();
+    if (!isHex24(id)) {
+      return NextResponse.json({ ok: false, message: "Invalid booking id" }, { status: 400 });
+    }
+
     const body = await req.json().catch(() => ({}));
     const out = await serverFetch<any>(`${base()}/api/bookings/${encodeURIComponent(id)}`, {
       method: "PATCH",
@@ -69,12 +73,14 @@ export async function PATCH(
 }
 
 // DELETE /api/admin/bookings/:id -> forwards to DELETE /api/bookings/:id
-export async function DELETE(
-  req: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function DELETE(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   try {
-    const id = params.id;
+    const { id: raw } = await ctx.params;               // <-- await params
+    const id = (raw || "").trim();
+    if (!isHex24(id)) {
+      return NextResponse.json({ ok: false, message: "Invalid booking id" }, { status: 400 });
+    }
+
     const out = await serverFetch<any>(`${base()}/api/bookings/${encodeURIComponent(id)}`, {
       method: "DELETE",
       headers: { ...auth(req), Accept: "application/json" },

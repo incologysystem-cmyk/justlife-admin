@@ -1,20 +1,24 @@
-// app/(admin)/bookings/page.tsx
 import Link from "next/link";
 import { unstable_noStore as noStore } from "next/cache";
 import { fetchBookings } from "@/lib/api";
-import Calendar from "@/app/components/bookings/Calendar";
+import BookingsClient from "./BookingsClient";
 
 export const dynamic = "force-dynamic";
+
+type ApiBooking = {
+  _id: string;
+  serviceName?: string;
+  status?: string;
+  schedule?: { startAt?: string };
+  createdAt?: string;
+};
 
 export default async function BookingsPage() {
   noStore();
 
   try {
-    const items = await fetchBookings();
-
-    if (!Array.isArray(items)) {
-      throw new Error("Bad shape: items is not an array");
-    }
+    const items = await fetchBookings(); // should return raw array from your API
+    if (!Array.isArray(items)) throw new Error("Bad shape: items is not an array");
 
     return (
       <div className="p-6 space-y-4">
@@ -23,7 +27,7 @@ export default async function BookingsPage() {
         {items.length === 0 ? (
           <p className="text-sm text-foreground/70">No bookings yet.</p>
         ) : (
-          <Calendar items={items} />
+          <BookingsClient items={items as ApiBooking[]} />
         )}
       </div>
     );
