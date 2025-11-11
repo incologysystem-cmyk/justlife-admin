@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import CategoryForm from "@/app/components/forms/CategoryForm";
+import CategoryForm from "@/app/components/forms/CategoryForm";   // <-- single source of truth
 import ServiceForm from "@/app/components/forms/ServiceForm";
 import { createCategory, createService } from "@/lib/api";
 import type { Category } from "@/types/catalog";
@@ -20,12 +20,7 @@ type CategoryLike = Partial<Category> & {
 };
 
 function slugify(s: string) {
-  return String(s)
-    .toLowerCase()
-    .trim()
-    .replace(/["']/g, "")
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/(^-|-$)/g, "");
+  return String(s).toLowerCase().trim().replace(/["']/g, "").replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
 }
 
 export default function CreateCategoryServiceModal({
@@ -42,7 +37,10 @@ export default function CreateCategoryServiceModal({
   const [step, setStep] = useState<1 | 2>(1);
   const [newCat, setNewCat] = useState<Category | null>(null);
 
-  const availableCats = useMemo(() => (newCat ? [newCat, ...categories] : categories), [categories, newCat]);
+  const availableCats = useMemo(
+    () => (newCat ? [newCat, ...categories] : categories),
+    [categories, newCat]
+  );
 
   return (
     <div className="space-y-6 w-full max-w-[85vw] mx-auto">
@@ -58,7 +56,6 @@ export default function CreateCategoryServiceModal({
             const raw = (await createCategory(payload as any)) as CategoryLike;
 
             const name = String(raw.name ?? raw.title ?? (payload as any)?.name ?? "Untitled") || "Untitled";
-
             const safe: Category = {
               id: String(raw.id ?? crypto.randomUUID()),
               name,
@@ -78,6 +75,10 @@ export default function CreateCategoryServiceModal({
             onCategoryCreated(safe);
             setStep(2);
           }}
+          // ✅ This is the key line: Skip → Service
+          onNext={() => setStep(2)}
+          createLabel="Create & Continue"
+          skipLabel="Skip Category → Service"
         />
       ) : (
         <ServiceForm
@@ -87,14 +88,12 @@ export default function CreateCategoryServiceModal({
           onSubmit={async (payload: any) => {
             const normalized = { ...payload, categoryId: payload.categoryId || newCat?.id! };
             const svcRaw: any = await createService(normalized);
-
             const minimal = {
               id: String(svcRaw?.id ?? svcRaw?._id ?? crypto.randomUUID()),
               name: String(svcRaw?.name ?? normalized.name ?? "Untitled"),
               categoryId: String(svcRaw?.categoryId ?? normalized.categoryId ?? newCat?.id ?? ""),
               basePrice: Number(svcRaw?.basePrice ?? normalized.basePrice ?? 0),
             };
-
             onServiceCreated(minimal);
             onClose();
           }}

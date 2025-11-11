@@ -1,13 +1,12 @@
-// app/(admin)/components/forms/CategoryForm.tsx
 "use client";
 
-import { useRef, useState, useMemo } from "react";
+import { useRef, useState, useMemo, useCallback, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { z } from "zod";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 
-/** ================= Schema ================= */
 const CategorySchema = z.object({
   name: z.string().trim().min(2, "Name is required"),
   sort: z.coerce.number().min(0).default(0),
@@ -18,8 +17,17 @@ const CategorySchema = z.object({
 });
 export type CategoryPayload = z.infer<typeof CategorySchema>;
 
-/** Helpers */
-function Field({ label, helper, children }: { label: string; helper?: string; children: React.ReactNode; }) {
+type Props = {
+  onSubmit: (payload: CategoryPayload) => Promise<void>;
+  /** Wizard-style advance callback. Prefer this for in-modal navigation. */
+  onNext?: () => void;
+  /** Route fallback if you don’t use a wizard. */
+  nextHref?: string;
+  createLabel?: string;
+  skipLabel?: string;
+};
+
+function Field({ label, helper, children }: { label: string; helper?: string; children: React.ReactNode }) {
   return (
     <div>
       <label className="text-xs text-gray-800">{label}</label>
@@ -42,7 +50,8 @@ function slugify(s: string) {
 function smartSplitTags(input: string): string[] {
   if (!input.trim()) return [];
   const out: string[] = [];
-  let cur = ""; let inQuotes = false;
+  let cur = "";
+  let inQuotes = false;
   for (let i = 0; i < input.length; i++) {
     const ch = input[i];
     if (ch === '"') { inQuotes = !inQuotes; continue; }
@@ -53,15 +62,41 @@ function smartSplitTags(input: string): string[] {
   return out;
 }
 
-/** ================= Component ================= */
-export default function CategoryForm({ onSubmit }: { onSubmit: (payload: CategoryPayload) => Promise<void>; }) {
+export default function CategoryForm({
+  onSubmit,
+  onNext,
+  nextHref,
+  createLabel = "Create",
+  skipLabel = "Skip",
+}: Props) {
+  useEffect(() => {
+    console.log("[CategoryForm] mounted @ '@/app/components/forms/CategoryForm'");
+    console.log("[CategoryForm] has onNext?", !!onNext, "nextHref:", nextHref);
+  }, [onNext, nextHref]);
+
   const formRef = useRef<HTMLFormElement>(null);
+  const router = useRouter();
+
   const [loading, setLoading] = useState(false);
   const [active, setActive] = useState(true);
   const [iconData, setIconData] = useState<string | undefined>(undefined);
   const [tagInput, setTagInput] = useState("");
   const [tags, setTags] = useState<string[]>([]);
   const canSubmit = useMemo(() => !loading, [loading]);
+
+  const goNext = useCallback(() => {
+    if (onNext) {
+      onNext();
+      return;
+    }
+    if (nextHref) {
+      router.push(nextHref);
+      return;
+    }
+    // Hard fail (deterministic) instead of silent global events
+    console.error("[CategoryForm] No onNext or nextHref provided. Cannot advance.");
+    toast.error("Cannot navigate to next step — missing onNext/nextHref on CategoryForm parent.");
+  }, [onNext, nextHref, router]);
 
   function addTag(tok?: string) {
     const v = (tok ?? tagInput).trim();
@@ -103,12 +138,13 @@ export default function CategoryForm({ onSubmit }: { onSubmit: (payload: Categor
       await onSubmit(parsed.data);
       toast.success("Category created");
 
-      // Reset
       formRef.current?.reset();
       setActive(true);
       setIconData(undefined);
       setTags([]);
       setTagInput("");
+
+      goNext();
     } catch (err: any) {
       console.error("Create category failed:", err);
       toast.error(err?.message || "Failed to create category");
@@ -117,14 +153,37 @@ export default function CategoryForm({ onSubmit }: { onSubmit: (payload: Categor
     }
   }
 
+  function handleSkip() {
+    if (loading) return;
+    console.log("[CategoryForm] Skip clicked");
+    toast.info("Skipped category creation");
+    goNext();
+  }
+
   return (
     <form
       id="category-form"
       ref={formRef}
       onSubmit={handleSubmit}
       className="bg-card border border-border rounded-2xl p-6 space-y-4 w-full max-w-3xl mx-auto text-gray-800"
+      onKeyDown={(e) => {
+        if ((e.ctrlKey || e.metaKey) && e.key === "Enter" && canSubmit) {
+          (e.currentTarget as HTMLFormElement).requestSubmit();
+        }
+      }}
     >
-      <div className="text-sm font-semibold text-gray-800">New Category</div>
+      <div className="flex items-center justify-between">
+        <div className="text-sm font-semibold text-gray-800">New Category</div>
+        <button
+          type="button"
+          onClick={handleSkip}
+          disabled={loading}
+          className="text-xs px-2 py-1 rounded border border-border hover:bg-white/40 disabled:opacity-50"
+          aria-label="Skip and go to next step"
+        >
+          {skipLabel}
+        </button>
+      </div>
 
       <Field label="Category name (shown to users)" helper="Add a short, clear category title customers recognize.">
         <input name="name" placeholder="e.g., Sofa Cleaning" className="w-full rounded border border-border bg-background px-3 py-2 text-sm text-gray-800 placeholder:text-gray-800/50" />
@@ -152,7 +211,7 @@ export default function CategoryForm({ onSubmit }: { onSubmit: (payload: Categor
             {tags.map((t, i) => (
               <span key={`${t}-${i}`} className="px-2 py-1 rounded bg-white/10 text-xs border border-border">
                 {t}
-                <button type="button" className="ml-1 text-gray-800" onClick={() => removeTag(i)}>×</button>
+                <button type="button" className="ml-1 text-gray-800" onClick={() => removeTag(i)} aria-label={`Remove tag ${t}`} title="Remove tag">×</button>
               </span>
             ))}
             <input
@@ -200,15 +259,25 @@ export default function CategoryForm({ onSubmit }: { onSubmit: (payload: Categor
         )}
       </Field>
 
-      <div className="space-y-2">
-        <div className="text-[11px] text-gray-800/70">Review fields, then click <span className="text-gray-800">Create</span>.</div>
-        <button
-          type="submit"
-          disabled={!canSubmit}
-          className="w-full px-3 py-2 rounded bg-emerald-500/20 border border-emerald-500/30 text-sm disabled:opacity-50 text-gray-800"
-        >
-          {loading ? "Creating..." : "Create"}
-        </button>
+      <div className="space-y-3">
+        <div className="text-[11px] text-gray-800/70">
+          Review fields, then click <span className="text-gray-800">Create</span>.
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <button type="button" onClick={handleSkip} disabled={loading} className="w-full px-3 py-2 rounded border border-border text-sm disabled:opacity-50">
+            {skipLabel}
+          </button>
+
+          <button type="submit" disabled={!canSubmit} className="w-full px-3 py-2 rounded bg-emerald-500/20 border border-emerald-500/30 text-sm disabled:opacity-50 text-gray-800">
+            {loading ? "Creating..." : createLabel}
+          </button>
+        </div>
+
+        <p className="text-[11px] text-gray-800/60">
+          Tip: <kbd className="px-1 py-0.5 border rounded text-[10px]">Ctrl</kbd> +{" "}
+          <kbd className="px-1 py-0.5 border rounded text-[10px]">Enter</kbd> to create.
+        </p>
       </div>
     </form>
   );

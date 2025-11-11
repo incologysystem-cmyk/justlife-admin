@@ -52,6 +52,8 @@ export default function CreateCategoryServiceDrawer({
     [categories, newCat]
   );
 
+  const goService = () => setStep(2); // used by Skip and after Create
+
   return (
     <div className="w-auto mx-auto space-y-6">
       <div className="flex items-center gap-2 text-xs">
@@ -78,12 +80,8 @@ export default function CreateCategoryServiceDrawer({
             const raw = (await createCategory(payload as any)) as CategoryLike;
 
             const name =
-              String(
-                raw.name ??
-                  raw.title ??
-                  (payload as any)?.name ??
-                  "Untitled"
-              ) || "Untitled";
+              String(raw.name ?? raw.title ?? (payload as any)?.name ?? "Untitled") ||
+              "Untitled";
 
             const safe: Category = {
               id: String(raw.id ?? crypto.randomUUID()),
@@ -102,8 +100,11 @@ export default function CreateCategoryServiceDrawer({
 
             setNewCat(safe);
             onCategoryCreated(safe);
-            setStep(2);
+            goService(); // after Create → Service
           }}
+          onNext={goService}                 // ✅ Skip → Service
+          createLabel="Create & Continue"
+          skipLabel="Skip Category → Service"
         />
       ) : (
         <ServiceForm
@@ -122,14 +123,9 @@ export default function CreateCategoryServiceDrawer({
               id: String(svcRaw?.id ?? svcRaw?._id ?? crypto.randomUUID()),
               name: String(svcRaw?.name ?? payload.name ?? "Untitled"),
               categoryId: String(
-                svcRaw?.categoryId ??
-                  normalized.categoryId ??
-                  newCat?.id ??
-                  ""
+                svcRaw?.categoryId ?? normalized.categoryId ?? newCat?.id ?? ""
               ),
-              basePrice: Number(
-                svcRaw?.basePrice ?? normalized.basePrice ?? 0
-              ),
+              basePrice: Number(svcRaw?.basePrice ?? normalized.basePrice ?? 0),
             };
 
             onServiceCreated(minimal);
