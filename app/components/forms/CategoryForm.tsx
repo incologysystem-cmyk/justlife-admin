@@ -1,7 +1,15 @@
 "use client";
 
-import { useRef, useState, useMemo, useCallback, useEffect } from "react";
+import {
+  useRef,
+  useState,
+  useMemo,
+  useCallback,
+  useEffect,
+  type ReactNode,
+} from "react";
 import { useRouter } from "next/navigation";
+import type { Route } from "next";
 import { toast } from "sonner";
 import { z } from "zod";
 import { Switch } from "@/components/ui/switch";
@@ -15,6 +23,7 @@ const CategorySchema = z.object({
   slug: z.string().trim().min(2).optional(),
   tags: z.array(z.string()).default([]).optional(),
 });
+
 export type CategoryPayload = z.infer<typeof CategorySchema>;
 
 type Props = {
@@ -22,12 +31,20 @@ type Props = {
   /** Wizard-style advance callback. Prefer this for in-modal navigation. */
   onNext?: () => void;
   /** Route fallback if you don’t use a wizard. */
-  nextHref?: string;
+  nextHref?: Route;
   createLabel?: string;
   skipLabel?: string;
 };
 
-function Field({ label, helper, children }: { label: string; helper?: string; children: React.ReactNode }) {
+function Field({
+  label,
+  helper,
+  children,
+}: {
+  label: string;
+  helper?: string;
+  children: ReactNode;
+}) {
   return (
     <div>
       <label className="text-xs text-gray-800">{label}</label>
@@ -36,6 +53,7 @@ function Field({ label, helper, children }: { label: string; helper?: string; ch
     </div>
   );
 }
+
 async function toDataURL(file: File): Promise<string> {
   return await new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -44,20 +62,36 @@ async function toDataURL(file: File): Promise<string> {
     reader.readAsDataURL(file);
   });
 }
+
 function slugify(s: string) {
-  return s.toLowerCase().trim().replace(/["']/g, "").replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+  return s
+    .toLowerCase()
+    .trim()
+    .replace(/["']/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "");
 }
+
 function smartSplitTags(input: string): string[] {
   if (!input.trim()) return [];
   const out: string[] = [];
   let cur = "";
   let inQuotes = false;
+
   for (let i = 0; i < input.length; i++) {
     const ch = input[i];
-    if (ch === '"') { inQuotes = !inQuotes; continue; }
-    if (ch === "," && !inQuotes) { if (cur.trim()) out.push(cur.trim()); cur = ""; continue; }
+    if (ch === '"') {
+      inQuotes = !inQuotes;
+      continue;
+    }
+    if (ch === "," && !inQuotes) {
+      if (cur.trim()) out.push(cur.trim());
+      cur = "";
+      continue;
+    }
     cur += ch;
   }
+
   if (cur.trim()) out.push(cur.trim());
   return out;
 }
@@ -82,6 +116,7 @@ export default function CategoryForm({
   const [iconData, setIconData] = useState<string | undefined>(undefined);
   const [tagInput, setTagInput] = useState("");
   const [tags, setTags] = useState<string[]>([]);
+
   const canSubmit = useMemo(() => !loading, [loading]);
 
   const goNext = useCallback(() => {
@@ -89,13 +124,20 @@ export default function CategoryForm({
       onNext();
       return;
     }
+
     if (nextHref) {
+      // nextHref is now typed as Route so this satisfies typedRoutes
       router.push(nextHref);
       return;
     }
+
     // Hard fail (deterministic) instead of silent global events
-    console.error("[CategoryForm] No onNext or nextHref provided. Cannot advance.");
-    toast.error("Cannot navigate to next step — missing onNext/nextHref on CategoryForm parent.");
+    console.error(
+      "[CategoryForm] No onNext or nextHref provided. Cannot advance."
+    );
+    toast.error(
+      "Cannot navigate to next step — missing onNext/nextHref on CategoryForm parent."
+    );
   }, [onNext, nextHref, router]);
 
   function addTag(tok?: string) {
@@ -104,6 +146,7 @@ export default function CategoryForm({
     setTags((prev) => Array.from(new Set([...prev, v])));
     setTagInput("");
   }
+
   function removeTag(i: number) {
     setTags((prev) => prev.filter((_, idx) => idx !== i));
   }
@@ -118,7 +161,12 @@ export default function CategoryForm({
       sort: Number(fd.get("sort") ?? 0),
       active,
       icon: iconData,
-      tags: Array.from(new Set([...tags, ...smartSplitTags(String(fd.get("tags_csv") || ""))])),
+      tags: Array.from(
+        new Set([
+          ...tags,
+          ...smartSplitTags(String(fd.get("tags_csv") || "")),
+        ])
+      ),
       slug: (() => {
         const s = String(fd.get("slug") || "").trim();
         if (s) return s;
@@ -185,39 +233,82 @@ export default function CategoryForm({
         </button>
       </div>
 
-      <Field label="Category name (shown to users)" helper="Add a short, clear category title customers recognize.">
-        <input name="name" placeholder="e.g., Sofa Cleaning" className="w-full rounded border border-border bg-background px-3 py-2 text-sm text-gray-800 placeholder:text-gray-800/50" />
+      <Field
+        label="Category name (shown to users)"
+        helper="Add a short, clear category title customers recognize."
+      >
+        <input
+          name="name"
+          placeholder="e.g., Sofa Cleaning"
+          className="w-full rounded border border-border bg-background px-3 py-2 text-sm text-gray-800 placeholder:text-gray-800/50"
+        />
       </Field>
 
       <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-        <Field label="Slug (SEO URL path, optional)" helper="Leave blank to auto-generate from name.">
-          <input name="slug" placeholder="sofa-cleaning" className="w-full rounded border border-border bg-background px-3 py-2 text-sm text-gray-800 placeholder:text-gray-800/50" />
+        <Field
+          label="Slug (SEO URL path, optional)"
+          helper="Leave blank to auto-generate from name."
+        >
+          <input
+            name="slug"
+            placeholder="sofa-cleaning"
+            className="w-full rounded border border-border bg-background px-3 py-2 text-sm text-gray-800 placeholder:text-gray-800/50"
+          />
         </Field>
 
         <Field label="Sort order" helper="Lower = higher priority.">
-          <input name="sort" type="number" min={0} defaultValue={0} className="w-full rounded border border-border bg-background px-3 py-2 text-sm text-gray-800 placeholder:text-gray-800/50" />
+          <input
+            name="sort"
+            type="number"
+            min={0}
+            defaultValue={0}
+            className="w-full rounded border border-border bg-background px-3 py-2 text-sm text-gray-800 placeholder:text-gray-800/50"
+          />
         </Field>
 
         <div className="flex items-end gap-2">
           <Switch id="active" checked={active} onCheckedChange={setActive} />
-          <Label htmlFor="active" className="text-xs text-gray-800">Active (visible to customers)</Label>
+          <Label htmlFor="active" className="text-xs text-gray-800">
+            Active (visible to customers)
+          </Label>
         </div>
-        <p className="md:col-start-3 text-[11px] text-gray-800/70 -mt-2">Toggle to make this category visible to customers.</p>
+        <p className="md:col-start-3 text-[11px] text-gray-800/70 -mt-2">
+          Toggle to make this category visible to customers.
+        </p>
       </div>
 
-      <Field label="Tags" helper="Press Enter to add. You can also paste a comma list below.">
+      <Field
+        label="Tags"
+        helper="Press Enter to add. You can also paste a comma list below."
+      >
         <div className="rounded border border-border p-2">
           <div className="flex flex-wrap gap-2">
             {tags.map((t, i) => (
-              <span key={`${t}-${i}`} className="px-2 py-1 rounded bg-white/10 text-xs border border-border">
+              <span
+                key={`${t}-${i}`}
+                className="px-2 py-1 rounded bg-white/10 text-xs border border-border"
+              >
                 {t}
-                <button type="button" className="ml-1 text-gray-800" onClick={() => removeTag(i)} aria-label={`Remove tag ${t}`} title="Remove tag">×</button>
+                <button
+                  type="button"
+                  className="ml-1 text-gray-800"
+                  onClick={() => removeTag(i)}
+                  aria-label={`Remove tag ${t}`}
+                  title="Remove tag"
+                >
+                  ×
+                </button>
               </span>
             ))}
             <input
               value={tagInput}
               onChange={(e) => setTagInput(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addTag(); } }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  addTag();
+                }
+              }}
               placeholder="type & press Enter"
               className="flex-1 min-w-[160px] bg-transparent outline-none text-sm text-gray-800"
             />
@@ -230,7 +321,10 @@ export default function CategoryForm({
         </div>
       </Field>
 
-      <Field label="Category thumbnail / icon (optional)" helper="Upload a small square icon; under 2MB recommended.">
+      <Field
+        label="Category thumbnail / icon (optional)"
+        helper="Upload a small square icon; under 2MB recommended."
+      >
         <div className="flex items-center gap-3">
           <input
             type="file"
@@ -239,13 +333,24 @@ export default function CategoryForm({
             onChange={async (e) => {
               const file = e.target.files?.[0];
               if (!file) return setIconData(undefined);
-              if (file.size > 2 * 1024 * 1024) { toast.error("Icon must be under 2MB"); return; }
-              try { setIconData(await toDataURL(file)); } catch { toast.error("Failed to read icon file"); }
+              if (file.size > 2 * 1024 * 1024) {
+                toast.error("Icon must be under 2MB");
+                return;
+              }
+              try {
+                setIconData(await toDataURL(file));
+              } catch {
+                toast.error("Failed to read icon file");
+              }
             }}
             className="w-full text-xs text-gray-800"
           />
           {iconData && (
-            <button type="button" className="text-xs px-2 py-1 rounded border border-border" onClick={() => setIconData(undefined)}>
+            <button
+              type="button"
+              className="text-xs px-2 py-1 rounded border border-border"
+              onClick={() => setIconData(undefined)}
+            >
               Remove
             </button>
           )}
@@ -253,30 +358,48 @@ export default function CategoryForm({
         {iconData && (
           <div className="mt-2 flex items-center gap-2">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={iconData} alt="icon preview" className="h-10 w-10 object-cover rounded border border-border" />
-            <div className="text-[11px] text-gray-800/70 truncate">Icon attached</div>
+            <img
+              src={iconData}
+              alt="icon preview"
+              className="h-10 w-10 object-cover rounded border border-border"
+            />
+            <div className="text-[11px] text-gray-800/70 truncate">
+              Icon attached
+            </div>
           </div>
         )}
       </Field>
 
       <div className="space-y-3">
         <div className="text-[11px] text-gray-800/70">
-          Review fields, then click <span className="text-gray-800">Create</span>.
+          Review fields, then click{" "}
+          <span className="text-gray-800">Create</span>.
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-          <button type="button" onClick={handleSkip} disabled={loading} className="w-full px-3 py-2 rounded border border-border text-sm disabled:opacity-50">
+          <button
+            type="button"
+            onClick={handleSkip}
+            disabled={loading}
+            className="w-full px-3 py-2 rounded border border-border text-sm disabled:opacity-50"
+          >
             {skipLabel}
           </button>
 
-          <button type="submit" disabled={!canSubmit} className="w-full px-3 py-2 rounded bg-emerald-500/20 border border-emerald-500/30 text-sm disabled:opacity-50 text-gray-800">
+          <button
+            type="submit"
+            disabled={!canSubmit}
+            className="w-full px-3 py-2 rounded bg-emerald-500/20 border border-emerald-500/30 text-sm disabled:opacity-50 text-gray-800"
+          >
             {loading ? "Creating..." : createLabel}
           </button>
         </div>
 
         <p className="text-[11px] text-gray-800/60">
-          Tip: <kbd className="px-1 py-0.5 border rounded text-[10px]">Ctrl</kbd> +{" "}
-          <kbd className="px-1 py-0.5 border rounded text-[10px]">Enter</kbd> to create.
+          Tip:{" "}
+          <kbd className="px-1 py-0.5 border rounded text-[10px]">Ctrl</kbd> +{" "}
+          <kbd className="px-1 py-0.5 border rounded text-[10px]">Enter</kbd>{" "}
+          to create.
         </p>
       </div>
     </form>

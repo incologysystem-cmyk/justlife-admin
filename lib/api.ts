@@ -1,22 +1,20 @@
 // lib/api.ts
 // Central mock API for the Justlife-style admin. Safe to use in both
 // server components and client components.
-// import type { Service } from "@/types/catalog";
 
 import type {
   ServiceDetail,
   ServiceVariant,
   CurrencyCode,
   ServiceStatus,
+  Category as CatalogCategory, // <-- alias to avoid conflict
 } from "@/types/catalog";
-import type { Category } from "@/types/catalog";
 import { withOrigin } from "@/lib/url";
 import { withServerCookies } from "@/lib/url";
 
-
-
-
-
+// ----------------------
+// Service (rich type used in some places)
+// ----------------------
 export type Service = {
   id: string;
   categoryId: string;
@@ -77,7 +75,6 @@ export type Service = {
   updatedAt?: string;
 };
 
-
 export type CreateServicePayload = {
   name: string;
   basePrice: number;
@@ -94,7 +91,6 @@ export type CreateServicePayload = {
   active?: boolean;
 };
 
-
 export type ServiceLite = {
   id: string;
   name: string;
@@ -104,21 +100,20 @@ export type ServiceLite = {
 };
 
 export type CategoryWithServices = {
-  category: Category;
+  category: CatalogCategory; // <-- uses alias from types/catalog
   services: ServiceLite[];
 };
 
-
-
-
-
-
-
-
-export type CreateCategoryPayload = { name: string; icon?: string; sort?: number; active?: boolean; slug?: string; tags?: string[] };
+export type CreateCategoryPayload = {
+  name: string;
+  icon?: string;
+  sort?: number;
+  active?: boolean;
+  slug?: string;
+  tags?: string[];
+};
 
 const USE_MOCK = process.env.NEXT_PUBLIC_USE_MOCK === "1"; // optional flag
-
 
 // Small helper to simulate network latency
 const sleep = (ms: number) => new Promise((res) => setTimeout(res, ms));
@@ -126,7 +121,12 @@ const sleep = (ms: number) => new Promise((res) => setTimeout(res, ms));
 // ----------------------
 // Shared Types (exports)
 // ----------------------
-export type OrderStatus = "pending" | "confirmed" | "assigned" | "completed" | "cancelled";
+export type OrderStatus =
+  | "pending"
+  | "confirmed"
+  | "assigned"
+  | "completed"
+  | "cancelled";
 
 export type BookingItem = any;
 
@@ -147,18 +147,15 @@ export type Provider = {
   status: OrderStatus | "pending" | "confirmed";
 };
 
+// Local light Category used only in this file / old parts of the UI
 export type Category = {
   id: string;
   name: string;
   icon?: string;
 };
 
-export type Service = {
-  id: string;
-  name: string;
-  categoryId: string;
-  basePrice: number;
-};
+// ⚠️ NOTE: previously there was a second `export type Service` here.
+// It’s been removed to avoid duplicate identifier errors.
 
 export type Booking = {
   id: string;
@@ -172,9 +169,6 @@ export type Customer = {
   name: string;
   phone: string;
 };
-
-
-
 
 // Useful when you later swap to a real backend
 export const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "";
@@ -209,7 +203,9 @@ export async function fetchDashboard() {
 // ----------------------
 // Orders
 // ----------------------
-export async function fetchOrders(opts: { limit?: number } = {}): Promise<Order[]> {
+export async function fetchOrders(
+  opts: { limit?: number } = {}
+): Promise<Order[]> {
   const { limit = 20 } = opts;
   await sleep(150);
 
@@ -219,7 +215,9 @@ export async function fetchOrders(opts: { limit?: number } = {}): Promise<Order[
     customer: ["Ayesha Khan", "Mohammed Ali", "Sara Ahmed", "John Doe"][i % 4]!,
     service: ["Sofa Cleaning", "Mattress Cleaning", "Carpet Cleaning"][i % 3]!,
     total: 40 + (i % 7) * 5,
-    status: (["pending", "confirmed", "assigned", "completed"][i % 4] as OrderStatus) ?? "pending",
+    status:
+      (["pending", "confirmed", "assigned", "completed"][i % 4] as OrderStatus) ??
+      "pending",
   }));
 }
 
@@ -229,41 +227,35 @@ export async function fetchOrders(opts: { limit?: number } = {}): Promise<Order[
 export async function fetchProviders(): Promise<Provider[]> {
   await sleep(120);
   return [
-    { id: "p1", name: "Sparkle Squad", city: "Dubai", phone: "+971 50 123 4567", status: "pending" },
-    { id: "p2", name: "FreshNest", city: "Abu Dhabi", phone: "+971 55 987 6543", status: "confirmed" },
+    {
+      id: "p1",
+      name: "Sparkle Squad",
+      city: "Dubai",
+      phone: "+971 50 123 4567",
+      status: "pending",
+    },
+    {
+      id: "p2",
+      name: "FreshNest",
+      city: "Abu Dhabi",
+      phone: "+971 55 987 6543",
+      status: "confirmed",
+    },
   ];
 }
 
 // ----------------------
-// Categories & Services
+// Categories
 // ----------------------
-// export async function fetchCategories(): Promise<{ categories: Category[]; services: Service[] }> {
-//   await sleep(100);
-
-//   const categories: Category[] = [
-//     { id: "c1", name: "Sofa" },
-//     { id: "c2", name: "Mattress" },
-//     { id: "c3", name: "Carpet" },
-//     { id: "c4", name: "Curtain" },
-//   ];
-
-//   const services: Service[] = [
-//     { id: "s1", name: "2-Seater", categoryId: "c1", basePrice: 25 },
-//     { id: "s2", name: "3-Seater", categoryId: "c1", basePrice: 35 },
-//     { id: "s3", name: "King Size", categoryId: "c2", basePrice: 40 },
-//   ];
-
-//   return { categories, services };
-// }
-
-
-export async function createCategory(payload: CreateCategoryPayload): Promise<Category> {
+export async function createCategory(
+  payload: CreateCategoryPayload
+): Promise<Category> {
   if (USE_MOCK) {
     await sleep(150);
     return {
       id: `c_${Math.random().toString(36).slice(2, 7)}`,
       name: payload.name,
-      icon: payload.icon
+      icon: payload.icon,
     };
   }
 
@@ -288,11 +280,15 @@ export async function createCategory(payload: CreateCategoryPayload): Promise<Ca
   }
 
   // normalize the created category shape
-  const raw = (data as any)?.data?.category ?? (data as any)?.category ?? (data as any);
+  const raw =
+    (data as any)?.data?.category ??
+    (data as any)?.category ??
+    (data as any);
   const created: Category = {
     id: String(raw?.id ?? crypto.randomUUID()),
     name: String(raw?.name ?? raw?.title ?? payload.name ?? "Untitled"),
     icon: raw?.icon,
+    // extra fields ignored by the light Category type, but kept for runtime:
     sort:
       typeof raw?.sort === "number"
         ? raw.sort
@@ -305,13 +301,18 @@ export async function createCategory(payload: CreateCategoryPayload): Promise<Ca
   return created;
 }
 
-
-
-
-export async function createService(payload: CreateServicePayload): Promise<ServiceDetail> {
+// ----------------------
+// Services
+// ----------------------
+export async function createService(
+  payload: CreateServicePayload
+): Promise<ServiceDetail> {
   const res = await fetch("/api/admin/services", {
     method: "POST",
-    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
     cache: "no-store",
     body: JSON.stringify(payload),
   });
@@ -333,7 +334,7 @@ export async function createService(payload: CreateServicePayload): Promise<Serv
     ? (data as any)?.data?.service ?? (data as any)?.service ?? (data as any)
     : undefined) as any | undefined;
 
-  // ---- Optional external normalizer (no TS error since we read from globalThis) ----
+  // Optional external normalizer (for flexibility)
   const maybeNormalize = (globalThis as any)?.normalizeService as
     | ((input: any) => ServiceDetail)
     | undefined;
@@ -346,7 +347,7 @@ export async function createService(payload: CreateServicePayload): Promise<Serv
     }
   }
 
-  // ---- Fallback manual normalization ----
+  // Fallback manual normalization
   const id =
     String(
       raw?.id ??
@@ -407,6 +408,7 @@ export async function createService(payload: CreateServicePayload): Promise<Serv
     name: String(raw?.name ?? payload.name ?? "Untitled Service"),
     slug: String(raw?.slug ?? payload.slug ?? ""),
     description: String(raw?.description ?? payload.description ?? ""),
+
     image: String(raw?.image ?? payload.image ?? ""),
     images: Array.isArray(raw?.images) ? raw.images : payload.images,
     categoryId: String(
@@ -420,7 +422,9 @@ export async function createService(payload: CreateServicePayload): Promise<Serv
     basePrice: Number(
       (typeof raw?.basePrice === "number"
         ? raw.basePrice
-        : raw?.base_price) ?? payload.basePrice ?? 0
+        : raw?.base_price) ??
+        payload.basePrice ??
+        0
     ),
     currency: (raw?.currency ?? payload.currency) as CurrencyCode | undefined,
     status: raw?.status as ServiceStatus | undefined,
@@ -438,8 +442,9 @@ export async function createService(payload: CreateServicePayload): Promise<Serv
   return created;
 }
 
-
-export async function fetchCategoriesWithServices(): Promise<CategoryWithServices[]> {
+export async function fetchCategoriesWithServices(): Promise<
+  CategoryWithServices[]
+> {
   const res = await fetch("/api/admin/categories-with-services", {
     method: "GET",
     headers: { Accept: "application/json" },
@@ -459,26 +464,33 @@ export async function fetchCategoriesWithServices(): Promise<CategoryWithService
         name: String(c.name ?? ""),
         slug: String(c.slug ?? ""),
         order: Number.isFinite(Number(c.order)) ? Number(c.order) : 0,
-      },
+      } as CatalogCategory,
       services: services.map((s: any) => ({
-        id: String(s.id ?? s._id ?? ""),            // ✅ ensure id
+        id: String(s.id ?? s._id ?? ""), // ✅ ensure id
         name: String(s.name ?? ""),
+        categoryId: String(s.categoryId ?? s.category_id ?? ""),
         basePrice: Number(s.basePrice ?? 0),
-        image: Array.isArray(s.images) && s.images[0] ? String(s.images[0]) : undefined,
+        image:
+          Array.isArray(s.images) && s.images[0]
+            ? String(s.images[0])
+            : undefined,
       })),
     } as CategoryWithServices;
   });
 }
- 
 
-
-export async function fetchService(idOrSlug: string): Promise<Service> {
-  const res = await fetch(`/api/admin/services/${encodeURIComponent(idOrSlug)}`, {
-    method: "GET",
-    headers: { Accept: "application/json" },
-    credentials: "include",
-    cache: "no-store",
-  });
+export async function fetchService(
+  idOrSlug: string
+): Promise<Service> {
+  const res = await fetch(
+    `/api/admin/services/${encodeURIComponent(idOrSlug)}`,
+    {
+      method: "GET",
+      headers: { Accept: "application/json" },
+      credentials: "include",
+      cache: "no-store",
+    }
+  );
 
   const ct = res.headers.get("content-type") || "";
   const isJSON = ct.includes("application/json");
@@ -493,25 +505,12 @@ export async function fetchService(idOrSlug: string): Promise<Service> {
   }
 
   // backend returns the service doc directly (per your controller)
-  return (data as Service) as Service;
+  return data as Service;
 }
 
-
-
-
-
 /** ----------------------
  *  Bookings (server/client-safe)
  *  ---------------------- */
-
-
-// lib/api.ts
-
-/** ----------------------
- *  Bookings (server/client-safe)
- *  ---------------------- */
-
-
 
 export async function fetchBookings(): Promise<BookingItem[]> {
   if (typeof window !== "undefined") {
@@ -535,7 +534,9 @@ export async function fetchBookings(): Promise<BookingItem[]> {
     const ct = res.headers.get("content-type") ?? "";
     const isJSON = ct.includes("application/json");
 
-    const body = isJSON ? await res.json().catch(() => ({})) : await res.text().catch(() => "");
+    const body = isJSON
+      ? await res.json().catch(() => ({}))
+      : await res.text().catch(() => "");
 
     if (!res.ok) {
       const message =
@@ -551,7 +552,9 @@ export async function fetchBookings(): Promise<BookingItem[]> {
       (isJSON && (body as any)?.data) ??
       (Array.isArray(body) ? body : []);
 
-    if (!Array.isArray(items)) throw new Error("Bad response shape: expected array of bookings.");
+    if (!Array.isArray(items)) {
+      throw new Error("Bad response shape: expected array of bookings.");
+    }
 
     return items as BookingItem[];
   } catch (err: any) {
@@ -587,11 +590,13 @@ export async function fetchBookingById(id: string): Promise<any> {
   return (data as any)?.data?.booking ?? (data as any)?.booking ?? data;
 }
 
-// (optional helpers)
 export async function createBooking(payload: any): Promise<any> {
   const res = await fetch("/api/admin/bookings", {
     method: "POST",
-    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
     credentials: "include",
     cache: "no-store",
     body: JSON.stringify(payload),
@@ -615,7 +620,10 @@ export async function createBooking(payload: any): Promise<any> {
 export async function updateBooking(id: string, patch: any): Promise<any> {
   const res = await fetch(`/api/admin/bookings/${encodeURIComponent(id)}`, {
     method: "PATCH",
-    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
     credentials: "include",
     cache: "no-store",
     body: JSON.stringify(patch),
@@ -659,9 +667,6 @@ export async function deleteBooking(id: string): Promise<any> {
   return (data as any)?.success === true ? true : data;
 }
 
-
-
-
 // ----------------------
 // Customers
 // ----------------------
@@ -673,18 +678,17 @@ export async function fetchCustomers(): Promise<Customer[]> {
   ];
 }
 
-
+// ----------------------
+// Earnings
+// ----------------------
 export async function fetchEarnings(): Promise<{
   today: number;
   thisWeek: number;
   thisMonth: number;
   series: { date: string; amount: number }[];
 }> {
-  // simulate network
-  const sleep = (ms: number) => new Promise((res) => setTimeout(res, ms));
   await sleep(120);
 
-  // generate a synthetic 30-day series
   const now = new Date();
   const series: { date: string; amount: number }[] = [];
   let thisWeek = 0;
@@ -693,11 +697,11 @@ export async function fetchEarnings(): Promise<{
   for (let i = 29; i >= 0; i--) {
     const d = new Date(now);
     d.setDate(now.getDate() - i);
-    const base = 700 + Math.round(Math.random() * 600); // $700–$1300 / day
+    const base = 700 + Math.round(Math.random() * 600); // 700–1300 / day
     series.push({ date: d.toLocaleDateString(), amount: base });
 
-    // sums
-    if (i <= now.getDay()) thisWeek += base; // rough weekly bucket
+    // rough weekly & monthly buckets
+    if (i <= now.getDay()) thisWeek += base;
     if (d.getMonth() === now.getMonth()) thisMonth += base;
   }
 

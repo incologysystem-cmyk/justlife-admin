@@ -2,7 +2,6 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import OtpInput from "@/app/components/auth/OtpInput";
 
@@ -16,7 +15,18 @@ export default function LoginPage() {
   const [cooldown, setCooldown] = useState(0);
   const [requestId, setRequestId] = useState<string | null>(null);
   const [codeLen, setCodeLen] = useState<number>(DEFAULT_CODE_LEN);
-  const next = useSearchParams().get("next") || "/";
+  const [next, setNext] = useState<string>("/");
+
+  // read ?next=... from URL on client
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const url = new URL(window.location.href);
+      setNext(url.searchParams.get("next") || "/");
+    } catch {
+      setNext("/");
+    }
+  }, []);
 
   // keep an interval ref to clear on unmount
   const timerRef = useRef<number | null>(null);
@@ -55,7 +65,8 @@ export default function LoginPage() {
       if (!r.ok || j.error) throw new Error(j.error || "Failed to send OTP");
 
       // your backend should return a UUID requestId required by otpVerifySchema
-      if (!j.requestId) throw new Error("requestId missing in /otp/start response");
+      if (!j.requestId)
+        throw new Error("requestId missing in /otp/start response");
       setRequestId(j.requestId);
 
       // Optional: backend can tell us code length (fallback to 6)
@@ -65,9 +76,9 @@ export default function LoginPage() {
         setCodeLen(DEFAULT_CODE_LEN);
       }
 
-      setCode("");           // reset any previous code
+      setCode(""); // reset any previous code
       setStep("otp");
-      startCooldown(30);     // 30s resend cooldown
+      startCooldown(30); // 30s resend cooldown
       if (j.devCode) toast.info(`Dev OTP: ${j.devCode}`);
       toast.success("OTP sent");
     } catch (e: any) {
@@ -79,7 +90,8 @@ export default function LoginPage() {
 
   async function verify() {
     if (!requestId) return toast.error("Missing requestId. Please resend OTP.");
-    if (code.length !== codeLen) return toast.error(`Enter ${codeLen}-digit code`);
+    if (code.length !== codeLen)
+      return toast.error(`Enter ${codeLen}-digit code`);
 
     setLoading(true);
     try {
@@ -104,7 +116,7 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen grid place-items-center p-6">
-      <div className="w-full max-w-sm bg-card border border-border rounded-xl2 p-5 space-y-4">
+      <div className="w-full max-w-sm bg-card border border-border rounded-2xl p-5 space-y-4">
         <h1 className="text-lg font-semibold">Sign in</h1>
 
         {step === "phone" ? (
@@ -126,7 +138,9 @@ export default function LoginPage() {
           </div>
         ) : (
           <div className="space-y-3">
-            <label className="text-xs text-white/60">Enter {codeLen}-digit code</label>
+            <label className="text-xs text-white/60">
+              Enter {codeLen}-digit code
+            </label>
             <OtpInput value={code} onChange={setCode} length={codeLen} />
             <button
               onClick={verify}
@@ -153,7 +167,10 @@ export default function LoginPage() {
         )}
 
         <p className="text-xs text-white/50">
-          No account? <a className="underline" href="/signup">Create one</a>
+          No account?{" "}
+          <a className="underline" href="/signup">
+            Create one
+          </a>
         </p>
       </div>
     </div>
