@@ -43,7 +43,7 @@ export function Sidebar() {
       // ignore
     } finally {
       const next = encodeURIComponent(pathname || "/");
-      window.location.href = `/login?next=${next}`;
+      window.location.href = `/provider/login?next=${next}`;
     }
   }
 
