@@ -167,7 +167,7 @@ export default function LoginPage() {
 
           <p className="text-xs text-gray-700">
             Not a provider?{" "}
-            <a href="/signup" className="underline text-emerald-600">
+            <a href="/provider/register" className="underline text-emerald-600">
               Apply now
             </a>
           </p>
