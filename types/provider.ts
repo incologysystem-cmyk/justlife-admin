@@ -102,7 +102,8 @@ export interface ProvidersResponse {
   providers: Provider[];
 }
 
-export interface ProviderResponse {
+export type ProviderResponse = {
   success: boolean;
-  provider: Provider;
-}
+  provider?: Provider;
+  message?: string;
+};

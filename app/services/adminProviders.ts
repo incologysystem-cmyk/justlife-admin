@@ -105,72 +105,73 @@ const dummyProviders: Provider[] = [
 // 🔹 DUMMY FUNCTIONS BELOW
 // ==========================================
 
-export async function fetchPendingProviders(): Promise<ProvidersResponse> {
-  await delay(500); // simulate loading
-  return {
-    success: true,
-    providers: dummyProviders.filter((p) => p.status === "pending"),
-  };
+export async function fetchPendingProviders() {
+  const res = await fetch("/api/admin/providers/pending", {
+    method: "GET",
+    credentials: "include",
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(text || "Failed to load providers");
+  }
+
+  return res.json();
 }
 
 export async function fetchProviderById(id: string): Promise<ProviderResponse> {
-  await delay(300);
-  const provider = dummyProviders.find((p) => p._id === id);
-  return {
-    success: true,
-    provider:
-      provider ||
-      ({
-        ...dummyProviders[0],
-        _id: id,
-      } as Provider),
-  };
+  const res = await fetch(`/api/admin/providers/${id}`, {
+    method: "GET",
+    credentials: "include",
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(text || "Failed to load provider");
+  }
+
+  return res.json();
 }
+
 
 export async function approveProviderApi(
   id: string,
   adminComment?: string
 ): Promise<ProviderResponse> {
-  await delay(300);
-  const provider = dummyProviders.find((p) => p._id === id);
-  if (provider) {
-    provider.status = "approved";
-    provider.adminComment = adminComment || "";
-    provider.approvedAt = new Date().toISOString();
+  const res = await fetch(`/api/admin/providers/${id}/approve`, {
+    method: "PATCH",
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ adminComment }),
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(text || "Failed to approve provider");
   }
 
-  return {
-    success: true,
-    provider:
-      provider ||
-      ({
-        ...dummyProviders[0],
-        _id: id,
-        status: "approved",
-      } as Provider),
-  };
+  return res.json();
 }
 
 export async function rejectProviderApi(
   id: string,
   adminComment?: string
 ): Promise<ProviderResponse> {
-  await delay(300);
-  const provider = dummyProviders.find((p) => p._id === id);
-  if (provider) {
-    provider.status = "rejected";
-    provider.adminComment = adminComment || "Rejected by admin";
-    provider.rejectedAt = new Date().toISOString();
+  const res = await fetch(`/api/admin/providers/${id}/reject`, {
+    method: "PATCH",
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ adminComment }),
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(text || "Failed to reject provider");
   }
 
-  return {
-    success: true,
-    provider:
-      provider ||
-      ({
-        ...dummyProviders[0],
-        _id: id,
-        status: "rejected",
-      } as Provider),
-  };
+  return res.json();
 }

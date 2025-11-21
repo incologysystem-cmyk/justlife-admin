@@ -3,14 +3,12 @@
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-// import {
-//   fetchProviderById,
-//   approveProviderApi,
-//   rejectProviderApi,
-// } from "../../../services/adminProviders";
-import { fetchProviderById, approveProviderApi, rejectProviderApi } from "@/app/services/adminProviders";
-import type { Provider } from "../../../types/provider";
-// import { Table, Th, Td } from "../../../components/admin/Table";
+import {
+  fetchProviderById,
+  approveProviderApi,
+  rejectProviderApi,
+} from "@/app/services/adminProviders";
+import type { Provider } from "@/types/provider";
 import { Table, Th, Td } from "@/app/components/admin/Table";
 
 export default function ProviderDetailPage() {
@@ -23,6 +21,7 @@ export default function ProviderDetailPage() {
   const [actionLoading, setActionLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [adminComment, setAdminComment] = useState("");
+  const [showRejectConfirm, setShowRejectConfirm] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -48,9 +47,12 @@ export default function ProviderDetailPage() {
     setActionLoading(true);
     setError(null);
     try {
-      const res = await approveProviderApi(provider._id, adminComment || undefined);
+      const res = await approveProviderApi(
+        provider._id,
+        adminComment || undefined
+      );
       setProvider(res.provider);
-      router.push("/providers/requests");
+      router.push("/admin/providers/requests");
     } catch (err: any) {
       setError(err?.message || "Failed to approve provider");
     } finally {
@@ -58,23 +60,29 @@ export default function ProviderDetailPage() {
     }
   };
 
-  const handleReject = async () => {
+  // Actual reject API call (modal se confirm hone ke baad chalega)
+  const performReject = async () => {
     if (!provider) return;
-    if (!adminComment.trim()) {
-      setError("Please add a reason for rejection in the admin comment.");
-      return;
-    }
+    if (!adminComment.trim()) return;
+
     setActionLoading(true);
     setError(null);
     try {
-      const res = await rejectProviderApi(provider._id, adminComment);
+      const res = await rejectProviderApi(provider._id, adminComment.trim());
       setProvider(res.provider);
-      router.push("/providers/requests");
+      setShowRejectConfirm(false);
+      router.push("/admin/providers/requests");
     } catch (err: any) {
       setError(err?.message || "Failed to reject provider");
     } finally {
       setActionLoading(false);
     }
+  };
+
+  // Reject button click → sirf modal open
+  const handleRejectClick = () => {
+    if (!adminComment.trim()) return;
+    setShowRejectConfirm(true);
   };
 
   if (loading) {
@@ -84,18 +92,14 @@ export default function ProviderDetailPage() {
     return <p className="text-sm text-red-600">{error}</p>;
   }
   if (!provider) {
-    return (
-      <p className="text-sm text-slate-500">
-        Provider not found.
-      </p>
-    );
+    return <p className="text-sm text-slate-500">Provider not found.</p>;
   }
 
   const user =
     typeof provider.userId === "string" ? undefined : provider.userId;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 relative">
       {/* Top summary */}
       <section className="grid gap-4 md:grid-cols-2">
         <div className="rounded-2xl border bg-white p-4 shadow-sm space-y-2">
@@ -266,7 +270,7 @@ export default function ProviderDetailPage() {
         )}
       </section>
 
-      {/* Tax / Qualif */}
+      {/* Tax / Qualifications */}
       <section className="grid gap-4 md:grid-cols-2">
         <div className="rounded-2xl border bg-white p-4 shadow-sm space-y-2">
           <h3 className="text-sm font-semibold">Taxation</h3>
@@ -335,9 +339,7 @@ export default function ProviderDetailPage() {
           rows={3}
         />
 
-        {error && (
-          <p className="text-sm text-red-600">{error}</p>
-        )}
+        {error && <p className="text-sm text-red-600">{error}</p>}
 
         <div className="flex flex-wrap gap-3">
           <button
@@ -350,20 +352,61 @@ export default function ProviderDetailPage() {
           </button>
           <button
             type="button"
-            onClick={handleReject}
-            disabled={actionLoading}
+            onClick={handleRejectClick}
+            disabled={actionLoading || !adminComment.trim()}
             className="inline-flex items-center rounded-xl bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-60"
           >
             {actionLoading ? "Processing…" : "Reject Provider"}
           </button>
         </div>
       </section>
+
+      {/* Reject confirmation modal */}
+      {showRejectConfirm && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40">
+          <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-xl">
+            <h4 className="text-base font-semibold text-slate-900">
+              Reject this supplier?
+            </h4>
+            <p className="mt-2 text-sm text-slate-600">
+              Are you sure you want to reject this supplier? This action will
+              mark their profile as <span className="font-semibold">rejected</span>{" "}
+              and they will not be able to go live unless you approve them again.
+            </p>
+
+            <div className="mt-4 rounded-xl bg-slate-50 p-3 text-xs text-slate-700">
+              <span className="font-semibold">Your comment:</span>{" "}
+              {adminComment.trim() || "No comment"}
+            </div>
+
+            <div className="mt-5 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setShowRejectConfirm(false)}
+                disabled={actionLoading}
+                className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={performReject}
+                disabled={actionLoading}
+                className="rounded-xl bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-60"
+              >
+                {actionLoading ? "Rejecting…" : "Yes, Reject"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
 function StatusBadge({ status }: { status: Provider["status"] }) {
-  const base = "inline-flex items-center rounded-full px-3 py-1 text-xs font-medium";
+  const base =
+    "inline-flex items-center rounded-full px-3 py-1 text-xs font-medium";
   if (status === "approved") {
     return (
       <span className={`${base} bg-emerald-50 text-emerald-700`}>
@@ -373,14 +416,10 @@ function StatusBadge({ status }: { status: Provider["status"] }) {
   }
   if (status === "rejected") {
     return (
-      <span className={`${base} bg-red-50 text-red-700`}>
-        Rejected
-      </span>
+      <span className={`${base} bg-red-50 text-red-700`}>Rejected</span>
     );
   }
   return (
-    <span className={`${base} bg-amber-50 text-amber-700`}>
-      Pending
-    </span>
+    <span className={`${base} bg-amber-50 text-amber-700`}>Pending</span>
   );
 }
