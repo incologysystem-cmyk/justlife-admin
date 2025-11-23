@@ -114,7 +114,7 @@ export default function CategoriesPage() {
       {/* Categories list */}
       <div className="bg-card border border-border rounded-xl overflow-hidden">
         {rows.length === 0 ? (
-          <div className="p-6 text-sm text-white/60">No categories yet.</div>
+          <div className="p-6 text-sm text-black/60">No categories yet.</div>
         ) : (
           <ul className="divide-y divide-border">
             {rows

@@ -470,14 +470,27 @@ export default function ServiceForm({
               <Field label="SKU Code (optional)" helper="Internal only; leave blank if unsure.">
                 <input name="skuCode" placeholder="SOFA-DC-001" className="w-full rounded border border-border bg-background px-3 py-2 text-sm" />
               </Field>
-              <Field label="Category" helper="Select the most relevant category.">
-                <select name="categoryId" defaultValue={defaultCategoryId ?? ""} className="w-full rounded border border-border bg-background px-3 py-2 text-sm">
-                  <option value="" disabled>Select category</option>
-                  {categories.map((c, idx) => (
-                    <option key={`${c.id}-${idx}`} value={c.id}>{c.name}</option>
-                  ))}
-                </select>
-              </Field>
+
+
+<Field label="Category" helper="Select the most relevant category.">
+  <select
+    name="categoryId"
+    defaultValue={defaultCategoryId ?? ""}
+    className="w-full rounded border border-border bg-background px-3 py-2 text-sm"
+  >
+    <option value="" disabled>
+      Select category
+    </option>
+    {categories.map((c, idx) => (
+      <option
+        key={`${(c as any)._id ?? (c as any).id ?? c.slug}-${idx}`}
+        value={(c as any)._id}   // 👈 yahan _id bhejo
+      >
+        {c.name}
+      </option>
+    ))}
+  </select>
+</Field>
 
               <Field label="Base price" helper="Price before variants/add-ons.">
                 <NumberBox name="basePrice" min={0} step={0.01} placeholder="e.g., 35.00" unit="AED" />
