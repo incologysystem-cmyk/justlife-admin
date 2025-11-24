@@ -110,46 +110,52 @@ export default function AdminLoginPage() {
     }
   }
 
-  // STEP 2: verify OTP and ensure role === admin
-  async function verifyOtp() {
-    if (!requestId) return toast.error("Missing requestId. Please resend OTP.");
-    if (code.length !== codeLen) {
-      return toast.error(`Enter ${codeLen}-digit code`);
-    }
-
-    setLoading(true);
-    try {
-      const r = await fetch("/api/auth/otp/verify", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ requestId, code }),
-      });
-
-      const data: LoginResponse = await r.json().catch(() => ({} as any));
-
-      if (!r.ok || data.error) {
-        throw new Error(data.error || data.message || "Invalid code");
-      }
-
-      if (!data.user || data.user.role !== "admin") {
-        throw new Error("You are not allowed to access the admin area.");
-      }
-
-      // Cookies server se already Set-Cookie ho chuke hain
-      toast.success("Logged in as admin");
-
-      try {
-        router.push(next || "/admin");
-      } catch {
-        window.location.href = next || "/admin";
-      }
-    } catch (e: any) {
-      toast.error(e?.message || "Verification failed");
-    } finally {
-      setLoading(false);
-    }
+// STEP 2: verify OTP and ensure role === admin
+async function verifyOtp() {
+  if (!requestId) return toast.error("Missing requestId. Please resend OTP.");
+  if (code.length !== codeLen) {
+    return toast.error(`Enter ${codeLen}-digit code`);
   }
+
+  setLoading(true);
+  try {
+    const r = await fetch("/api/auth/otp/verify", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ requestId, code }),
+    });
+
+    const data: LoginResponse = await r.json().catch(() => ({} as any));
+
+    if (!r.ok || data.error) {
+      throw new Error(data.error || data.message || "Invalid code");
+    }
+
+    if (!data.user || data.user.role !== "admin") {
+      throw new Error("You are not allowed to access the admin area.");
+    }
+
+    toast.success("Logged in as admin");
+
+    // 👇 Yahan se redirect ko sanitize kar rahe hain
+    const target =
+      next && next.startsWith("/admin") ? next : "/admin";
+
+    console.log("ADMIN LOGIN redirecting to:", target);
+
+    try {
+      router.push(target);
+    } catch {
+      window.location.href = target;
+    }
+  } catch (e: any) {
+    toast.error(e?.message || "Verification failed");
+  } finally {
+    setLoading(false);
+  }
+}
+
 
   return (
     <div className="min-h-screen flex">

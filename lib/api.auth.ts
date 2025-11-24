@@ -4,20 +4,45 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 
 const TOKEN_COOKIE = "token";
+const ADMIN_COOKIE = "cm_admin_token";
 
-function setAuthCookieOn(res: NextResponse, token: string) {
+function setAuthCookieOn(res: NextResponse, token: string, role?: string) {
+  // Generic token (customer / provider / admin sab ke liye)
   res.cookies.set(TOKEN_COOKIE, token, {
     httpOnly: true,
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
     path: "/",
-    maxAge: 60 * 60 * 24 * 7,
+    maxAge: 60 * 60 * 24 * 7, // 7 days
   });
+
+  // Agar admin hai to admin cookie bhi set karo
+  if (role === "admin") {
+    res.cookies.set(ADMIN_COOKIE, token, {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+      path: "/",
+      maxAge: 60 * 60 * 24 * 7,
+    });
+  }
+
   return res;
 }
 
 function clearAuthCookieOn(res: NextResponse) {
-  res.cookies.set(TOKEN_COOKIE, "", { path: "/", maxAge: 0 });
+  // Generic token clear
+  res.cookies.set(TOKEN_COOKIE, "", {
+    path: "/",
+    maxAge: 0,
+  });
+
+  // Admin token clear
+  res.cookies.set(ADMIN_COOKIE, "", {
+    path: "/",
+    maxAge: 0,
+  });
+
   return res;
 }
 
@@ -71,7 +96,7 @@ export async function startOtpRoute(req: Request) {
   return NextResponse.json(j, { status: r.status });
 }
 
-/** POST /api/auth/otp/verify -> set cookie */
+/** POST /api/auth/otp/verify -> set cookie(s) */
 export async function verifyOtpRoute(req: Request) {
   const payload = await req.json().catch(() => ({} as any));
 
@@ -87,14 +112,24 @@ export async function verifyOtpRoute(req: Request) {
   );
 
   const j = await r.json().catch(() => ({} as any));
+
+  console.log(
+    "[NEXT] /api/auth/otp/verify backend response:",
+    r.status,
+    JSON.stringify(j)
+  );
+
   const res = NextResponse.json(j, { status: r.status });
 
-  if (r.ok && j?.token) setAuthCookieOn(res, j.token);
+  if (r.ok && j?.token) {
+    const role = j?.user?.role as string | undefined;
+    setAuthCookieOn(res, j.token, role);
+  }
 
   return res;
 }
 
-/** POST /api/auth/login (optional) -> set cookie */
+/** POST /api/auth/login (optional) -> set cookie(s) */
 export async function passwordLoginRoute(req: Request) {
   const payload = await req.json().catch(() => ({} as any));
 
@@ -110,9 +145,19 @@ export async function passwordLoginRoute(req: Request) {
   );
 
   const j = await r.json().catch(() => ({} as any));
+
+  console.log(
+    "[NEXT] /api/auth/login backend response:",
+    r.status,
+    JSON.stringify(j)
+  );
+
   const res = NextResponse.json(j, { status: r.status });
 
-  if (r.ok && j?.token) setAuthCookieOn(res, j.token);
+  if (r.ok && j?.token) {
+    const role = j?.user?.role as string | undefined;
+    setAuthCookieOn(res, j.token, role);
+  }
 
   return res;
 }
