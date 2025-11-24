@@ -136,11 +136,7 @@ export default function AdminLoginPage() {
         throw new Error("You are not allowed to access the admin area.");
       }
 
-      // ✅ Save admin token in a cookie
-      if (data.token) {
-        document.cookie = `cm_admin_token=${data.token}; path=/;`;
-      }
-
+      // Cookies server se already Set-Cookie ho chuke hain
       toast.success("Logged in as admin");
 
       try {

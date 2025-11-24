@@ -1,3 +1,4 @@
+// app/(provider)/login/page.tsx  (ya jahan bhi tumhari file hai)
 "use client";
 
 import { useEffect, useRef, useState } from "react";
@@ -7,6 +8,26 @@ import OtpInput from "@/app/components/auth/OtpInput";
 
 const DEFAULT_CODE_LEN = 6;
 
+type UserRole = "customer" | "provider" | "admin" | string;
+
+type OtpVerifyResponse = {
+  success?: boolean;
+  user?: {
+    role?: UserRole;
+    [key: string]: any;
+  };
+  data?: {
+    user?: {
+      role?: UserRole;
+      [key: string]: any;
+    };
+  };
+  token?: string;
+  error?: string;
+  message?: string;
+  codeLength?: number;
+};
+
 export default function LoginPage() {
   const [step, setStep] = useState<"phone" | "otp">("phone");
   const [phone, setPhone] = useState("");
@@ -15,13 +36,13 @@ export default function LoginPage() {
   const [cooldown, setCooldown] = useState(0);
   const [requestId, setRequestId] = useState<string | null>(null);
   const [codeLen, setCodeLen] = useState<number>(DEFAULT_CODE_LEN);
-  const [next, setNext] = useState<string>("/");
+  const [next, setNext] = useState<string>("/provider");
 
   useEffect(() => {
     if (typeof window === "undefined") return;
     try {
       const url = new URL(window.location.href);
-      setNext(url.searchParams.get("next") || "/");
+      setNext(url.searchParams.get("next") || "/provider");
     } catch {
       setNext("/provider");
     }
@@ -49,20 +70,48 @@ export default function LoginPage() {
     }, 1000);
   }
 
+  // 🔹 STEP 1: Provider ke liye OTP start
   async function start() {
     if (!phone.trim()) return toast.error("Enter phone number");
     setLoading(true);
+
     try {
-      const r = await fetch("/api/auth/otp/start", {
+      const payload = {
+        phone: phone.trim(),
+        requireProvider: true,
+      };
+
+      console.log("PROVIDER OTP START PAYLOAD ->", payload);
+
+      const r = await fetch("/api/auth/otp/start?requireProvider=1", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone: phone.trim() }),
+        body: JSON.stringify(payload),
       });
-      const j = await r.json();
 
-      if (!r.ok || j.error) throw new Error(j.error || "Failed to send OTP");
-      if (!j.requestId) throw new Error("Missing requestId");
+      const j = await r.json().catch(() => ({} as any));
 
+      console.log("PROVIDER OTP START RESPONSE ->", j);
+
+      // ❌ Backend ne reject kiya
+      if (!r.ok || j.error) {
+        const msg =
+          j.error ||
+          j.message ||
+          (r.status === 400
+            ? "This number is not registered as a provider"
+            : "Failed to send OTP");
+
+        toast.error(msg);
+        return; // yahin ruk jao, OTP step pe mat jao
+      }
+
+      if (!j.requestId) {
+        toast.error("Missing requestId in response");
+        return;
+      }
+
+      // ✅ Success flow
       setRequestId(j.requestId);
       setCodeLen(j.codeLength || DEFAULT_CODE_LEN);
       setCode("");
@@ -70,12 +119,14 @@ export default function LoginPage() {
       startCooldown(30);
       toast.success("OTP sent to WhatsApp");
     } catch (e: any) {
+      console.error("PROVIDER OTP START ERROR ->", e);
       toast.error(e?.message || "Failed to send OTP");
     } finally {
       setLoading(false);
     }
   }
 
+  // 🔹 STEP 2: OTP verify
   async function verify() {
     if (!requestId) return toast.error("Missing requestId");
     if (code.length !== codeLen) return toast.error(`Enter ${codeLen} digits`);
@@ -87,13 +138,32 @@ export default function LoginPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ requestId, code }),
       });
-      const j = await r.json();
 
-      if (!r.ok || j.error) throw new Error(j.error || "Invalid OTP");
+      const j: OtpVerifyResponse = await r.json().catch(() => ({} as any));
+      console.log("PROVIDER OTP VERIFY RESPONSE ->", j);
+
+      if (!r.ok || j.error) {
+        throw new Error(j.error || j.message || "Invalid OTP");
+      }
+
+      const user =
+        j.user ||
+        (j.data && j.data.user) ||
+        undefined;
+
+      if (!user) {
+        throw new Error("User info missing in OTP response");
+      }
+
+      // Extra safety: sirf provider ko aage jaane do
+      if (user.role !== "provider") {
+        throw new Error("This number is not registered as a provider");
+      }
 
       toast.success("Signed in as provider");
       window.location.href = next;
     } catch (e: any) {
+      console.error("PROVIDER OTP VERIFY ERROR ->", e);
       toast.error(e?.message || "Verification failed");
     } finally {
       setLoading(false);
@@ -102,11 +172,9 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen flex">
-      
       {/* LEFT 50% — FULL HEIGHT FORM */}
       <div className="w-full md:w-1/2 flex items-center justify-center bg-gray-50 px-8 py-10 text-gray-800">
         <div className="w-full max-w-md space-y-6">
-
           <div className="space-y-1">
             <h1 className="text-2xl font-bold text-gray-800">Provider Login</h1>
             <p className="text-sm text-gray-700">
@@ -171,7 +239,6 @@ export default function LoginPage() {
               Apply now
             </a>
           </p>
-
         </div>
       </div>
 
@@ -191,12 +258,11 @@ export default function LoginPage() {
             Grow your service business with Credible Management
           </p>
           <p className="text-xs mt-1">
-            Get instant job requests, complete tasks and receive payments —
-            all from one dashboard.
+            Get instant job requests, complete tasks and receive payments — all
+            from one dashboard.
           </p>
         </div>
       </div>
-
     </div>
   );
 }

@@ -14,7 +14,7 @@ function slugify(s: string) {
 }
 
 export default async function NewServicePage() {
-  if (!requireAdmin()) redirect("/login?next=/admin/services/new");
+  if (!requireAdmin()) redirect("provider/login?next=/admin/services/new");
 
   const res = await serverFetch<{ success?: boolean; data?: any[] }>(
     "/catalog/categories?active=false",

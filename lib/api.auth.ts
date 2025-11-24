@@ -22,66 +22,128 @@ function clearAuthCookieOn(res: NextResponse) {
 }
 
 function getTokenServer(): string | null {
-  // Narrow the type and safely call .get(...)
   const store = cookies() as ReturnType<typeof cookies> | any;
   return store?.get?.(TOKEN_COOKIE)?.value ?? null;
 }
 
 /** POST /api/auth/otp/start */
 export async function startOtpRoute(req: Request) {
-  const { phone } = await req.json();
-  const r = await fetch(`${process.env.NEXT_PUBLIC_API_BASE}/api/auth/otp/start`, {
+  // 🧾 body parse
+  let body: any;
+  try {
+    body = await req.json();
+  } catch {
+    body = {};
+  }
+
+  // 🔗 original URL se query nikaalo
+  const incomingUrl = new URL(req.url);
+  const search = incomingUrl.search || ""; // e.g. "?requireProvider=1"
+
+  // 🔥 backend URL me bhi same query lagao
+  const backendUrl = `${process.env.NEXT_PUBLIC_API_BASE}/api/auth/otp/start${search}`;
+
+  console.log("[NEXT] /api/auth/otp/start incoming body:", body);
+  console.log("[NEXT] /api/auth/otp/start forwarding to:", backendUrl);
+
+  const r = await fetch(backendUrl, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ phone }),
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
   });
-  const j = await r.json();
+
+  const text = await r.text().catch(() => "");
+  let j: any = {};
+  try {
+    j = text ? JSON.parse(text) : {};
+  } catch {
+    j = { raw: text };
+  }
+
+  console.log(
+    "[NEXT] /api/auth/otp/start backend response:",
+    r.status,
+    JSON.stringify(j)
+  );
+
   return NextResponse.json(j, { status: r.status });
 }
 
 /** POST /api/auth/otp/verify -> set cookie */
 export async function verifyOtpRoute(req: Request) {
-  const payload = await req.json();
-  const r = await fetch(`${process.env.NEXT_PUBLIC_API_BASE}/api/auth/otp/verify`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
-  const j = await r.json();
+  const payload = await req.json().catch(() => ({} as any));
+
+  console.log("[NEXT] /api/auth/otp/verify incoming body:", payload);
+
+  const r = await fetch(
+    `${process.env.NEXT_PUBLIC_API_BASE}/api/auth/otp/verify`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    }
+  );
+
+  const j = await r.json().catch(() => ({} as any));
   const res = NextResponse.json(j, { status: r.status });
+
   if (r.ok && j?.token) setAuthCookieOn(res, j.token);
+
   return res;
 }
 
 /** POST /api/auth/login (optional) -> set cookie */
 export async function passwordLoginRoute(req: Request) {
-  const payload = await req.json();
-  const r = await fetch(`${process.env.NEXT_PUBLIC_API_BASE}/api/auth/login`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
-  const j = await r.json();
+  const payload = await req.json().catch(() => ({} as any));
+
+  console.log("[NEXT] /api/auth/login incoming body:", payload);
+
+  const r = await fetch(
+    `${process.env.NEXT_PUBLIC_API_BASE}/api/auth/login`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    }
+  );
+
+  const j = await r.json().catch(() => ({} as any));
   const res = NextResponse.json(j, { status: r.status });
+
   if (r.ok && j?.token) setAuthCookieOn(res, j.token);
+
   return res;
 }
 
 /** PATCH /api/auth/complete-profile (needs bearer from cookie) */
 export async function completeProfileRoute(req: Request) {
   const token = getTokenServer();
-  if (!token) return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
+  if (!token) {
+    return NextResponse.json(
+      { ok: false, error: "Unauthorized" },
+      { status: 401 }
+    );
+  }
 
-  const payload = await req.json();
-  const r = await fetch(`${process.env.NEXT_PUBLIC_API_BASE}/api/auth/complete-profile`, {
-    method: "PATCH",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
-    },
-    body: JSON.stringify(payload),
-  });
-  const j = await r.json();
+  const payload = await req.json().catch(() => ({} as any));
+
+  console.log("[NEXT] /api/auth/complete-profile incoming body:", payload);
+
+  const r = await fetch(
+    `${process.env.NEXT_PUBLIC_API_BASE}/api/auth/complete-profile`,
+    {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(payload),
+    }
+  );
+
+  const j = await r.json().catch(() => ({} as any));
   return NextResponse.json(j, { status: r.status });
 }
 
