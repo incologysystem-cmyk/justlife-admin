@@ -3,9 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Table, Th, Td } from "../../components/admin/Table";
-// import { fetchCustomers } from "../../services/adminCustomers";
 import { fetchCustomers } from "@/app/components/services/adminCustomers";
-// import type { Customer } from "../../types/customer";
 import type { Customer } from "@/types/customer";
 
 export default function AdminCustomersPage() {
@@ -67,7 +65,13 @@ export default function AdminCustomersPage() {
           </thead>
           <tbody>
             {customers.map((c) => {
-              const name = `${c.firstName} ${c.lastName}`.trim();
+              const name = `${c.firstName ?? ""} ${c.lastName ?? ""}`.trim();
+
+              const joined =
+                c.createdAt && !Number.isNaN(new Date(c.createdAt).getTime())
+                  ? new Date(c.createdAt).toLocaleDateString()
+                  : "—";
+
               return (
                 <tr key={c._id}>
                   <Td>{name || "—"}</Td>
@@ -80,7 +84,7 @@ export default function AdminCustomersPage() {
                   <Td>{c.totalBookings}</Td>
                   <Td>{c.totalJobs}</Td>
                   <Td>{c.totalSpent.toFixed(2)}</Td>
-                  <Td>{new Date(c.createdAt).toLocaleDateString()}</Td>
+                  <Td>{joined}</Td>
                   <Td>
                     <Link
                       href={`/admin/customers/${c._id}`}

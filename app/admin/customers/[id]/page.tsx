@@ -4,9 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { Table, Th, Td } from "../../../components/admin/Table";
-// import { fetchCustomerById } from "../../../services/adminCustomers";
 import { fetchCustomerById } from "@/app/components/services/adminCustomers";
-// import type { CustomerWithHistory } from "../../../types/customer";
 import type { CustomerWithHistory } from "@/types/customer";
 
 export default function AdminCustomerDetailPage() {
@@ -59,13 +57,23 @@ export default function AdminCustomerDetailPage() {
     );
   }
 
-  const name = `${customer.firstName} ${customer.lastName}`.trim();
+  const name = `${customer.firstName ?? ""} ${
+    customer.lastName ?? ""
+  }`.trim();
+
+  const joined =
+    customer.createdAt &&
+    !Number.isNaN(new Date(customer.createdAt).getTime())
+      ? new Date(customer.createdAt).toLocaleDateString()
+      : "—";
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-lg font-semibold">{name}</h1>
+          <h1 className="text-lg font-semibold">
+            {name || "Customer"}
+          </h1>
           <p className="text-xs text-slate-500">
             Customer ID: {customer._id}
           </p>
@@ -82,11 +90,15 @@ export default function AdminCustomerDetailPage() {
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <div className="rounded-lg border border-slate-200 p-3">
           <p className="text-xs text-slate-500">Total Bookings</p>
-          <p className="text-xl font-semibold">{customer.totalBookings}</p>
+          <p className="text-xl font-semibold">
+            {customer.totalBookings}
+          </p>
         </div>
         <div className="rounded-lg border border-slate-200 p-3">
           <p className="text-xs text-slate-500">Total Jobs</p>
-          <p className="text-xl font-semibold">{customer.totalJobs}</p>
+          <p className="text-xl font-semibold">
+            {customer.totalJobs}
+          </p>
         </div>
         <div className="rounded-lg border border-slate-200 p-3">
           <p className="text-xs text-slate-500">Total Spent</p>
@@ -102,9 +114,7 @@ export default function AdminCustomerDetailPage() {
         <div className="text-xs text-slate-600 space-y-1">
           <p>Email: {customer.email || "—"}</p>
           <p>Phone: {customer.phoneE164 || "—"}</p>
-          <p>
-            Joined: {new Date(customer.createdAt).toLocaleDateString()}
-          </p>
+          <p>Joined: {joined}</p>
         </div>
       </section>
 
@@ -127,17 +137,23 @@ export default function AdminCustomerDetailPage() {
               </tr>
             </thead>
             <tbody>
-              {customer.bookings.map((b) => (
-                <tr key={b._id}>
-                  <Td>{b.code}</Td>
-                  <Td>{b.serviceName}</Td>
-                  <Td className="capitalize">{b.status}</Td>
-                  <Td>
-                    {new Date(b.scheduledAt).toLocaleString()}
-                  </Td>
-                  <Td>{b.totalAmount.toFixed(2)}</Td>
-                </tr>
-              ))}
+              {customer.bookings.map((b) => {
+                const scheduled =
+                  b.scheduledAt &&
+                  !Number.isNaN(new Date(b.scheduledAt).getTime())
+                    ? new Date(b.scheduledAt).toLocaleString()
+                    : "—";
+
+                return (
+                  <tr key={b._id}>
+                    <Td>{b.code}</Td>
+                    <Td>{b.serviceName}</Td>
+                    <Td className="capitalize">{b.status}</Td>
+                    <Td>{scheduled}</Td>
+                    <Td>{b.totalAmount.toFixed(2)}</Td>
+                  </tr>
+                );
+              })}
             </tbody>
           </Table>
         )}
@@ -162,17 +178,23 @@ export default function AdminCustomerDetailPage() {
               </tr>
             </thead>
             <tbody>
-              {customer.jobs.map((j) => (
-                <tr key={j._id}>
-                  <Td>{j.jobCode}</Td>
-                  <Td>{j.category}</Td>
-                  <Td>{j.providerName || "—"}</Td>
-                  <Td className="capitalize">{j.status}</Td>
-                  <Td>
-                    {new Date(j.createdAt).toLocaleString()}
-                  </Td>
-                </tr>
-              ))}
+              {customer.jobs.map((j) => {
+                const created =
+                  j.createdAt &&
+                  !Number.isNaN(new Date(j.createdAt).getTime())
+                    ? new Date(j.createdAt).toLocaleString()
+                    : "—";
+
+                return (
+                  <tr key={j._id}>
+                    <Td>{j.jobCode}</Td>
+                    <Td>{j.category}</Td>
+                    <Td>{j.providerName || "—"}</Td>
+                    <Td className="capitalize">{j.status}</Td>
+                    <Td>{created}</Td>
+                  </tr>
+                );
+              })}
             </tbody>
           </Table>
         )}
