@@ -9,7 +9,7 @@ import type { CustomerWithHistory } from "@/types/customer";
 
 export default function AdminCustomerDetailPage() {
   const params = useParams<{ id: string }>();
-  const customerId = params?.id;
+  const customerId = params?.id as string | undefined;
 
   const [customer, setCustomer] = useState<CustomerWithHistory | null>(null);
   const [loading, setLoading] = useState(true);
@@ -57,9 +57,7 @@ export default function AdminCustomerDetailPage() {
     );
   }
 
-  const name = `${customer.firstName ?? ""} ${
-    customer.lastName ?? ""
-  }`.trim();
+  const name = `${customer.firstName ?? ""} ${customer.lastName ?? ""}`.trim();
 
   const joined =
     customer.createdAt &&
@@ -69,6 +67,7 @@ export default function AdminCustomerDetailPage() {
 
   return (
     <div className="space-y-6">
+      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-lg font-semibold">
@@ -134,6 +133,7 @@ export default function AdminCustomerDetailPage() {
                 <Th>Status</Th>
                 <Th>Scheduled</Th>
                 <Th>Amount</Th>
+                <Th>Actions</Th>
               </tr>
             </thead>
             <tbody>
@@ -144,13 +144,29 @@ export default function AdminCustomerDetailPage() {
                     ? new Date(b.scheduledAt).toLocaleString()
                     : "—";
 
+                const code =
+                  b.code || b._id || b.serviceName || "—";
+
+                const amount =
+                  typeof b.totalAmount === "number"
+                    ? b.totalAmount
+                    : 0;
+
                 return (
                   <tr key={b._id}>
-                    <Td>{b.code}</Td>
-                    <Td>{b.serviceName}</Td>
-                    <Td className="capitalize">{b.status}</Td>
+                    <Td>{code}</Td>
+                    <Td>{b.serviceName || "—"}</Td>
+                    <Td className="capitalize">{b.status || "—"}</Td>
                     <Td>{scheduled}</Td>
-                    <Td>{b.totalAmount.toFixed(2)}</Td>
+                    <Td>{amount.toFixed(2)}</Td>
+                    <Td>
+                      <Link
+                        href={`/admin/bookings/${b._id}`}
+                        className="inline-flex items-center rounded-md border border-slate-200 px-2 py-1 text-[11px] font-medium text-slate-700 hover:bg-slate-50"
+                      >
+                        View
+                      </Link>
+                    </Td>
                   </tr>
                 );
               })}
@@ -159,7 +175,7 @@ export default function AdminCustomerDetailPage() {
         )}
       </section>
 
-      {/* Jobs history */}
+      {/* Jobs history (placeholder for future jobs integration) */}
       <section className="space-y-3">
         <h2 className="text-sm font-semibold">Jobs / Orders</h2>
         {customer.jobs.length === 0 ? (

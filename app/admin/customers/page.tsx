@@ -1,9 +1,13 @@
+// app/admin/customers/page.tsx
 "use client";
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Table, Th, Td } from "../../components/admin/Table";
-import { fetchCustomers } from "@/app/components/services/adminCustomers";
+import {
+  fetchCustomers,
+  fetchCustomerById,
+} from "@/app/components/services/adminCustomers";
 import type { Customer } from "@/types/customer";
 
 export default function AdminCustomersPage() {
@@ -13,11 +17,58 @@ export default function AdminCustomersPage() {
 
   useEffect(() => {
     let mounted = true;
+
     (async () => {
       try {
+        // 1) basic list (sirf users)
         const res = await fetchCustomers();
         if (!mounted) return;
-        setCustomers(res.customers);
+
+        const baseCustomers = res.customers || [];
+
+        // 2) har customer ka detailed history le kar stats merge karo
+        const enriched = await Promise.all(
+          baseCustomers.map(async (c) => {
+            try {
+              const detail = await fetchCustomerById(c._id);
+              const dc = detail.customer;
+
+              const totalBookings =
+                (dc as any).totalBookings ??
+                (dc as any).stats?.totalBookings ??
+                c.totalBookings ??
+                0;
+
+              const totalSpent =
+                (dc as any).totalSpent ??
+                (dc as any).stats?.totalSpent ??
+                c.totalSpent ??
+                0;
+
+              const totalJobs =
+                (dc as any).totalJobs ??
+                ((dc as any).stats?.services || []).reduce(
+                  (sum: number, s: any) => sum + (s.count ?? 0),
+                  0
+                ) ??
+                c.totalJobs ??
+                0;
+
+              return {
+                ...c,
+                totalBookings,
+                totalSpent,
+                totalJobs,
+              } as Customer;
+            } catch {
+              // agar detail fail ho jaye to basic wali values use kar lo
+              return c;
+            }
+          })
+        );
+
+        if (!mounted) return;
+        setCustomers(enriched);
       } catch (err: any) {
         if (!mounted) return;
         setError(err?.message || "Failed to load customers");
@@ -25,6 +76,7 @@ export default function AdminCustomersPage() {
         if (mounted) setLoading(false);
       }
     })();
+
     return () => {
       mounted = false;
     };
@@ -65,12 +117,26 @@ export default function AdminCustomersPage() {
           </thead>
           <tbody>
             {customers.map((c) => {
-              const name = `${c.firstName ?? ""} ${c.lastName ?? ""}`.trim();
+              const name = `${c.firstName ?? ""} ${
+                c.lastName ?? ""
+              }`.trim();
 
               const joined =
-                c.createdAt && !Number.isNaN(new Date(c.createdAt).getTime())
+                c.createdAt &&
+                !Number.isNaN(new Date(c.createdAt).getTime())
                   ? new Date(c.createdAt).toLocaleDateString()
                   : "—";
+
+              const totalBookings =
+                typeof c.totalBookings === "number"
+                  ? c.totalBookings
+                  : 0;
+
+              const totalJobs =
+                typeof c.totalJobs === "number" ? c.totalJobs : 0;
+
+              const totalSpentNumber =
+                typeof c.totalSpent === "number" ? c.totalSpent : 0;
 
               return (
                 <tr key={c._id}>
@@ -81,9 +147,9 @@ export default function AdminCustomersPage() {
                       <div>{c.phoneE164 || "—"}</div>
                     </div>
                   </Td>
-                  <Td>{c.totalBookings}</Td>
-                  <Td>{c.totalJobs}</Td>
-                  <Td>{c.totalSpent.toFixed(2)}</Td>
+                  <Td>{totalBookings}</Td>
+                  <Td>{totalJobs}</Td>
+                  <Td>{totalSpentNumber.toFixed(2)}</Td>
                   <Td>{joined}</Td>
                   <Td>
                     <Link

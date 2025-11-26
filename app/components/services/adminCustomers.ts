@@ -1,10 +1,12 @@
+// app/components/services/adminCustomers.ts
 import type {
   CustomersResponse,
   CustomerWithHistory,
   Customer,
 } from "@/types/customer";
 
-const API_PREFIX = "/api/bookings"; // ⬅️ same rehne do (Next API proxy use ho raha hai)
+const CUSTOMERS_API_PREFIX = "/api/bookings/customers";
+const BOOKINGS_ADMIN_API_PREFIX = "/api/admin/bookings"; // ⬅️ yahan se booking detail ayegi
 
 async function handleJsonResponse<T>(res: Response): Promise<T> {
   const text = await res.text().catch(() => "");
@@ -15,7 +17,7 @@ async function handleJsonResponse<T>(res: Response): Promise<T> {
     json = { raw: text };
   }
 
-  if (!res.ok || json?.error) {
+  if (!res.ok || json?.error || json?.message === "Request failed") {
     const msg =
       json?.error ||
       json?.message ||
@@ -31,14 +33,13 @@ async function handleJsonResponse<T>(res: Response): Promise<T> {
  * GET /api/bookings/customers → proxy → backend /api/users/customers
  */
 export async function fetchCustomers(): Promise<CustomersResponse> {
-  const res = await fetch(`${API_PREFIX}/customers`, {
+  const res = await fetch(`${CUSTOMERS_API_PREFIX}`, {
     method: "GET",
     credentials: "include",
   });
 
   const json = await handleJsonResponse<any>(res);
 
-  // backend: { success, items: [user docs] }
   const items: any[] =
     json.items ??
     json.customers ??
@@ -46,7 +47,6 @@ export async function fetchCustomers(): Promise<CustomersResponse> {
     [];
 
   const customers: Customer[] = items.map((item) => {
-    // ✅ name ab user fields se
     const fullName: string =
       item.customerName ||
       `${item.firstName ?? ""} ${item.lastName ?? ""}`;
@@ -70,7 +70,7 @@ export async function fetchCustomers(): Promise<CustomersResponse> {
       email: item.customerEmail || item.email || "",
       phoneE164: item.phoneE164 || item.customerPhone || "",
       createdAt: item.createdAt || new Date().toISOString(),
-      totalBookings: item.totalBookings ?? 0, // backend abhi nahi bhej raha to 0 rahega
+      totalBookings: item.totalBookings ?? 0,
       totalJobs,
       totalSpent: item.totalSpent ?? 0,
     } as Customer;
@@ -94,7 +94,7 @@ export async function fetchCustomerById(
     throw new Error("Customer id is required");
   }
 
-  const res = await fetch(`${API_PREFIX}/customers/${id}/history`, {
+  const res = await fetch(`${CUSTOMERS_API_PREFIX}/${id}/history`, {
     method: "GET",
     credentials: "include",
   });
@@ -108,7 +108,6 @@ export async function fetchCustomerById(
     throw new Error("Customer not found in response");
   }
 
-  // ---- Base customer fields (from user doc) ----
   const fullName: string =
     backendCustomer.customerName ||
     `${backendCustomer.firstName ?? ""} ${
@@ -130,7 +129,10 @@ export async function fetchCustomerById(
       : 0;
 
   const base: Customer = {
-    _id: backendCustomer.customerId || backendCustomer._id || backendCustomer.id,
+    _id:
+      backendCustomer.customerId ||
+      backendCustomer._id ||
+      backendCustomer.id,
     firstName: firstName || "",
     lastName: lastName || "",
     email: backendCustomer.customerEmail || backendCustomer.email || "",
@@ -145,7 +147,6 @@ export async function fetchCustomerById(
       stats.totalSpent ?? backendCustomer.totalSpent ?? 0,
   };
 
-  // ---- Bookings mapping (previous + upcoming merge) ----
   const bookingsRaw: any[] = [
     ...(json.previous ?? []),
     ...(json.upcoming ?? []),
@@ -164,10 +165,14 @@ export async function fetchCustomerById(
       b.createdAt ||
       new Date().toISOString(),
     totalAmount:
-      b.totalAmount ?? b.amount ?? b.pricing?.total ?? 0,
+      // backend se ab "amount" aa raha hai + price.total bhi hai
+      b.amount ??
+      b.totalAmount ??
+      b.price?.total ??
+      b.pricing?.total ??
+      0,
   }));
 
-  // ---- Jobs: users module se abhi jobs nahi aa rahi, empty rakhenge ----
   const jobs: any[] = [];
 
   const customer: CustomerWithHistory = {
@@ -180,4 +185,30 @@ export async function fetchCustomerById(
     success: Boolean(json.success ?? json.ok ?? true),
     customer,
   };
+}
+
+/**
+ * 🔹 Single booking detail
+ * GET /api/admin/bookings/:id → proxy → backend /api/bookings/:id
+ */
+export async function fetchBookingById(
+  id: string
+): Promise<{ booking: any }> {
+  if (!id) throw new Error("Booking id is required");
+
+  const res = await fetch(`${BOOKINGS_ADMIN_API_PREFIX}/${id}`, {
+    method: "GET",
+    credentials: "include",
+  });
+
+  const json = await handleJsonResponse<any>(res);
+
+  const booking = json.data?.booking ?? json.booking ?? json;
+
+  if (!booking || booking._id === undefined) {
+    throw new Error("Booking not found in response");
+  }
+
+  // Optional: normalize some fields if you want
+  return { booking };
 }
