@@ -10,18 +10,16 @@ const statusClass = (status: string | undefined) => {
   const s = (status || "").toLowerCase();
   switch (s) {
     case "paid":
-      return "bg-emerald-50 text-emerald-700 border-emerald-200";
+      return "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200";
     case "scheduled":
-      return "bg-blue-50 text-blue-700 border-blue-200";
-    case "in_progress":
-      return "bg-amber-50 text-amber-700 border-amber-200";
+      return "bg-blue-50 text-blue-700 ring-1 ring-blue-200";
     case "completed":
-      return "bg-slate-900 text-slate-50 border-slate-800";
+      return "bg-slate-900 text-slate-50 ring-1 ring-slate-800";
     case "cancelled":
     case "refunded":
-      return "bg-rose-50 text-rose-700 border-rose-200";
+      return "bg-rose-50 text-rose-700 ring-1 ring-rose-200";
     default:
-      return "bg-slate-50 text-slate-700 border-slate-200";
+      return "bg-slate-50 text-slate-700 ring-1 ring-slate-200";
   }
 };
 
@@ -76,6 +74,13 @@ export default function AdminBookingDetailPage() {
     return d.toLocaleString();
   }, [booking]);
 
+  const isUpcoming = useMemo(() => {
+    if (!booking?.schedule?.startAt) return false;
+    const d = new Date(booking.schedule.startAt);
+    if (Number.isNaN(d.getTime())) return false;
+    return d.getTime() > Date.now();
+  }, [booking]);
+
   if (loading) {
     return (
       <div className="flex h-full items-center justify-center">
@@ -87,14 +92,14 @@ export default function AdminBookingDetailPage() {
   if (error || !booking) {
     return (
       <div className="space-y-4">
-        <div className="rounded-xl border border-rose-200 bg-rose-50 p-4">
+        <div className="rounded-xl border border-rose-200 bg-rose-50/80 px-4 py-3">
           <p className="text-sm font-medium text-rose-700">
             {error || "Booking not found"}
           </p>
         </div>
         <Link
           href="/admin/customers"
-          className="inline-flex items-center text-xs font-medium text-blue-600 underline"
+          className="inline-flex items-center text-xs font-medium text-blue-600 hover:text-blue-700"
         >
           ← Back to customers
         </Link>
@@ -102,43 +107,55 @@ export default function AdminBookingDetailPage() {
     );
   }
 
-  const shortService =
-    booking.serviceName?.length > 40
-      ? booking.serviceName.slice(0, 40) + "…"
-      : booking.serviceName;
-
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      {/* Top header */}
+      <header className="flex flex-col gap-3 border-b border-slate-100 pb-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="space-y-1">
           <div className="flex items-center gap-2 text-[11px] text-slate-500">
             <Link href="/admin/customers" className="hover:text-slate-700">
               Customers
             </Link>
             <span>/</span>
-            <span>Booking detail</span>
+            <span>Booking</span>
           </div>
-          <h1 className="text-lg font-semibold text-slate-900">
-            Booking detail
-          </h1>
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 className="text-lg font-semibold text-slate-900">
+              Booking{" "}
+              <span className="font-mono text-[12px] text-slate-600">
+                #{booking._id}
+              </span>
+            </h1>
+          </div>
           <p className="text-xs text-slate-500">
-            Service:&nbsp;
+            Service:{" "}
             <span className="font-medium text-slate-800">
-              {shortService || "—"}
+              {booking.serviceName}
             </span>
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          <span
-            className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-medium ${statusClass(
-              booking.status
-            )}`}
-          >
-            <span className="mr-1.5 h-1.5 w-1.5 rounded-full bg-current opacity-80" />
-            {booking.status || "Unknown"}
-          </span>
+        <div className="flex flex-col items-start gap-2 sm:items-end">
+          <div className="flex flex-wrap items-center gap-2">
+            <span
+              className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium ${statusClass(
+                booking.status
+              )}`}
+            >
+              <span className="h-1.5 w-1.5 rounded-full bg-current opacity-80" />
+              {booking.status || "Unknown"}
+            </span>
+            {booking.price?.total != null && (
+              <span className="inline-flex items-baseline rounded-full bg-slate-900 px-3 py-1 text-[11px] font-medium text-slate-50">
+                <span className="mr-1 text-[10px] uppercase opacity-70">
+                  Total
+                </span>
+                <span className="font-mono">
+                  {booking.price.currency || "AED"} {booking.price.total}
+                </span>
+              </span>
+            )}
+          </div>
           <Link
             href="/admin/customers"
             className="inline-flex items-center rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 shadow-sm hover:bg-slate-50"
@@ -146,9 +163,50 @@ export default function AdminBookingDetailPage() {
             ← Back to customers
           </Link>
         </div>
-      </div>
+      </header>
 
-      {/* Top grid: customer + schedule + price */}
+      {/* Quick summary bar */}
+      <section className="grid gap-3 rounded-xl border border-slate-100 bg-slate-50/70 p-3 text-xs text-slate-700 sm:grid-cols-3">
+        <div className="flex flex-col">
+          <span className="text-[11px] uppercase tracking-wide text-slate-500">
+            Scheduled
+          </span>
+          <span className="mt-0.5 font-medium">
+            {scheduled}
+            {isUpcoming && (
+              <span className="ml-1 rounded-full bg-emerald-100 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700">
+                Upcoming
+              </span>
+            )}
+          </span>
+        </div>
+        <div className="flex flex-col">
+          <span className="text-[11px] uppercase tracking-wide text-slate-500">
+            Qty • Variant
+          </span>
+          <span className="mt-0.5 font-medium">
+            {booking.qty ?? 1}
+            {booking.variantId && (
+              <span className="ml-2 font-mono text-[11px] text-slate-600">
+                {booking.variantId}
+              </span>
+            )}
+          </span>
+        </div>
+        <div className="flex flex-col">
+          <span className="text-[11px] uppercase tracking-wide text-slate-500">
+            Created / Updated
+          </span>
+          <span className="mt-0.5">
+            <span className="block">{createdAt}</span>
+            <span className="block text-[11px] text-slate-500">
+              Last update: {updatedAt}
+            </span>
+          </span>
+        </div>
+      </section>
+
+      {/* Main sections */}
       <div className="grid gap-4 md:grid-cols-3">
         {/* Customer */}
         <section className="rounded-xl border border-slate-100 bg-white p-4 shadow-sm">
@@ -157,25 +215,25 @@ export default function AdminBookingDetailPage() {
           </h2>
           <dl className="space-y-1.5 text-xs text-slate-700">
             <div className="flex">
-              <dt className="w-20 text-slate-500">Name</dt>
-              <dd className="flex-1">
+              <dt className="w-24 text-slate-500">Name</dt>
+              <dd className="flex-1 font-medium">
                 {booking.customerName || "—"}
               </dd>
             </div>
             <div className="flex">
-              <dt className="w-20 text-slate-500">Email</dt>
-              <dd className="flex-1">
+              <dt className="w-24 text-slate-500">Email</dt>
+              <dd className="flex-1 break-all">
                 {booking.customerEmail || "—"}
               </dd>
             </div>
             <div className="flex">
-              <dt className="w-20 text-slate-500">Phone</dt>
+              <dt className="w-24 text-slate-500">Phone</dt>
               <dd className="flex-1">
                 {booking.phone || "—"}
               </dd>
             </div>
             <div className="mt-2 flex">
-              <dt className="w-20 text-slate-500">Customer ID</dt>
+              <dt className="w-24 text-slate-500">Customer ID</dt>
               <dd className="flex-1 font-mono text-[11px] text-slate-600">
                 {booking.customerId || "—"}
               </dd>
@@ -211,15 +269,19 @@ export default function AdminBookingDetailPage() {
                 {booking.schedule?.frequency || "once"}
               </dd>
             </div>
-            <div className="flex">
-              <dt className="w-24 text-slate-500">Quantity</dt>
-              <dd className="flex-1">{booking.qty ?? 1}</dd>
-            </div>
-            {booking.variantId && (
+            {booking.schedule?.until && (
               <div className="flex">
-                <dt className="w-24 text-slate-500">Variant ID</dt>
-                <dd className="flex-1 font-mono text-[11px] text-slate-600 break-all">
-                  {booking.variantId}
+                <dt className="w-24 text-slate-500">Until</dt>
+                <dd className="flex-1">
+                  {new Date(booking.schedule.until).toLocaleDateString()}
+                </dd>
+              </div>
+            )}
+            {typeof booking.schedule?.count === "number" && (
+              <div className="flex">
+                <dt className="w-24 text-slate-500">Occurrences</dt>
+                <dd className="flex-1">
+                  {booking.schedule.count}
                 </dd>
               </div>
             )}
@@ -240,9 +302,7 @@ export default function AdminBookingDetailPage() {
             </div>
             <div className="flex">
               <dt className="w-24 text-slate-500">Base</dt>
-              <dd className="flex-1">
-                {booking.price?.base ?? 0}
-              </dd>
+              <dd className="flex-1">{booking.price?.base ?? 0}</dd>
             </div>
             <div className="flex">
               <dt className="w-24 text-slate-500">Addons</dt>
@@ -252,9 +312,7 @@ export default function AdminBookingDetailPage() {
             </div>
             <div className="flex">
               <dt className="w-24 text-slate-500">Fees</dt>
-              <dd className="flex-1">
-                {booking.price?.fees ?? 0}
-              </dd>
+              <dd className="flex-1">{booking.price?.fees ?? 0}</dd>
             </div>
             <div className="flex">
               <dt className="w-24 text-slate-500">Discount</dt>
@@ -264,25 +322,25 @@ export default function AdminBookingDetailPage() {
             </div>
             {booking.price?.promoCode && (
               <div className="flex">
-                <dt className="w-24 text-slate-500">Promo code</dt>
+                <dt className="w-24 text-slate-500">Promo</dt>
                 <dd className="flex-1">
                   {booking.price.promoCode}
                 </dd>
               </div>
             )}
-            <div className="mt-2 border-t border-dashed border-slate-200 pt-2">
-              <p className="text-xs text-slate-500">Total</p>
-              <p className="font-mono text-sm font-semibold text-slate-900">
+            <div className="mt-2 flex border-t border-dashed border-slate-200 pt-2">
+              <dt className="w-24 text-slate-500">Total</dt>
+              <dd className="flex-1 font-mono text-sm font-semibold text-slate-900">
                 {booking.price?.total ?? 0}
-              </p>
+              </dd>
             </div>
           </dl>
         </section>
       </div>
 
-      {/* Bottom grid: left (address/addons/form) + right (payment/meta) */}
+      {/* Bottom grid: Address / Addons / Form / Payment / Meta */}
       <div className="grid gap-4 lg:grid-cols-2">
-        {/* Left column */}
+        {/* Left side */}
         <div className="space-y-4">
           {/* Address */}
           <section className="rounded-xl border border-slate-100 bg-white p-4 shadow-sm">
@@ -292,18 +350,22 @@ export default function AdminBookingDetailPage() {
             <div className="space-y-1 text-xs text-slate-700">
               {booking.address ? (
                 <>
-                  {booking.address.line1 && <p>{booking.address.line1}</p>}
-                  {booking.address.building && <p>{booking.address.building}</p>}
-                  {booking.address.community && (
-                    <p>{booking.address.community}</p>
+                  {"line1" in booking.address && booking.address.line1 && (
+                    <p>{booking.address.line1}</p>
                   )}
-                  {(booking.address.city || booking.address.unit) && (
-                    <p className="text-[11px] text-slate-500">
-                      {[booking.address.city, booking.address.unit]
-                        .filter(Boolean)
-                        .join(" • ")}
-                    </p>
-                  )}
+                  {"building" in booking.address &&
+                    booking.address.building && (
+                      <p>{booking.address.building}</p>
+                    )}
+                  {"community" in booking.address &&
+                    booking.address.community && (
+                      <p>{booking.address.community}</p>
+                    )}
+                  <p className="text-slate-600">
+                    {[booking.address.city, booking.address.unit]
+                      .filter(Boolean)
+                      .join(" • ") || "—"}
+                  </p>
                   {typeof booking.address.notes === "string" &&
                     booking.address.notes.trim().length > 0 && (
                       <p className="text-[11px] text-slate-500">
@@ -330,7 +392,7 @@ export default function AdminBookingDetailPage() {
                 {booking.addonItems.map((a: any, idx: number) => (
                   <li
                     key={idx}
-                    className="flex items-center justify-between rounded-lg bg-slate-50 px-2 py-1"
+                    className="flex items-center justify-between rounded-md bg-slate-50 px-2 py-1"
                   >
                     <span className="truncate">
                       {a.name || "Addon"}
@@ -358,9 +420,9 @@ export default function AdminBookingDetailPage() {
               <dl className="space-y-1.5 text-xs text-slate-700">
                 {Object.entries(booking.formAnswers).map(
                   ([key, value]: [string, any]) => (
-                    <div key={key} className="flex text-[11px]">
-                      <dt className="w-24 flex-shrink-0 font-medium capitalize text-slate-700">
-                        {key}:
+                    <div key={key} className="flex">
+                      <dt className="w-24 text-slate-500 capitalize">
+                        {key}
                       </dt>
                       <dd className="flex-1">
                         {typeof value === "string"
@@ -379,74 +441,61 @@ export default function AdminBookingDetailPage() {
           </section>
         </div>
 
-        {/* Right column */}
+        {/* Right side */}
         <div className="space-y-4">
           {/* Payment / Stripe */}
           <section className="rounded-xl border border-slate-100 bg-white p-4 shadow-sm">
             <h2 className="mb-3 text-sm font-semibold text-slate-900">
               Payment / Stripe
             </h2>
-            <div className="space-y-3">
-              {/* Status pill row */}
-              <div className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2">
-                <div>
-                  <p className="text-[11px] uppercase tracking-wide text-slate-500">
-                    Payment status
-                  </p>
-                  <p className="text-xs font-semibold text-slate-900">
-                    {booking.status || "—"}
-                  </p>
-                </div>
-                <span
-                  className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-medium ${statusClass(
-                    booking.status
-                  )}`}
-                >
-                  <span className="mr-1.5 h-1.5 w-1.5 rounded-full bg-current opacity-80" />
-                  {booking.status || "Unknown"}
-                </span>
+            <dl className="space-y-1.5 text-xs text-slate-700">
+              <div className="flex">
+                <dt className="w-28 text-slate-500">Status</dt>
+                <dd className="flex-1">
+                  {booking.status || "—"}
+                </dd>
               </div>
-
-              {/* Session ID */}
-              <div className="rounded-lg border border-slate-100 bg-slate-50/80 px-3 py-2">
-                <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
-                  Session ID
-                </p>
-                <p className="mt-1 break-all font-mono text-[11px] text-slate-800">
+              <div className="flex">
+                <dt className="w-28 text-slate-500">Session ID</dt>
+                <dd className="flex-1 break-all text-[11px]">
                   {booking.stripe?.sessionId || "—"}
-                </p>
+                </dd>
               </div>
-
-              {/* Payment Intent */}
-              <div className="rounded-lg border border-slate-100 bg-slate-50/80 px-3 py-2">
-                <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
+              <div className="flex">
+                <dt className="w-28 text-slate-500">
                   Payment Intent
-                </p>
-                <p className="mt-1 break-all font-mono text-[11px] text-slate-800">
+                </dt>
+                <dd className="flex-1 break-all text-[11px]">
                   {booking.stripe?.paymentIntentId || "—"}
-                </p>
+                </dd>
               </div>
-            </div>
+            </dl>
           </section>
 
-          {/* Meta (no Booking ID) */}
+          {/* Meta */}
           <section className="rounded-xl border border-slate-100 bg-white p-4 shadow-sm">
             <h2 className="mb-3 text-sm font-semibold text-slate-900">
               Meta
             </h2>
             <dl className="space-y-1.5 text-xs text-slate-700">
               <div className="flex">
-                <dt className="w-24 text-slate-500">Created at</dt>
+                <dt className="w-28 text-slate-500">Booking ID</dt>
+                <dd className="flex-1 font-mono text-[11px] text-slate-600">
+                  {booking._id}
+                </dd>
+              </div>
+              <div className="flex">
+                <dt className="w-28 text-slate-500">Created at</dt>
                 <dd className="flex-1">{createdAt}</dd>
               </div>
               <div className="flex">
-                <dt className="w-24 text-slate-500">Updated at</dt>
+                <dt className="w-28 text-slate-500">Updated at</dt>
                 <dd className="flex-1">{updatedAt}</dd>
               </div>
               {booking.providerId && (
                 <div className="flex">
-                  <dt className="w-24 text-slate-500">Provider ID</dt>
-                  <dd className="flex-1 font-mono text-[11px] text-slate-600 break-all">
+                  <dt className="w-28 text-slate-500">Provider ID</dt>
+                  <dd className="flex-1 font-mono text-[11px] text-slate-600">
                     {booking.providerId}
                   </dd>
                 </div>
