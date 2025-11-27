@@ -181,7 +181,7 @@ export default function ProviderBookingDetailPage() {
           </p>
         </div>
         <Link
-          href="/dashboard/bookings"
+          href="/bookings"
           className="inline-flex items-center text-xs font-medium text-blue-600 underline"
         >
           ← Back to bookings
@@ -248,10 +248,10 @@ export default function ProviderBookingDetailPage() {
           </div>
 
           <Link
-            href="/dashboard/bookings"
+            href="/orders"
             className="inline-flex items-center rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 shadow-sm hover:bg-slate-50"
           >
-            ← Back to bookings
+            ← Back to Orders
           </Link>
         </div>
       </div>

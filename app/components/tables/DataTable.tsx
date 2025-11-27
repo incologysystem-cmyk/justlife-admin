@@ -12,7 +12,9 @@ import {
   useReactTable,
 } from "@tanstack/react-table";
 
-export default function DataTable<T extends Record<string, any>>({
+export default function DataTable<
+  T extends Record<string, any> & { _id?: string; id?: string }
+>({
   columns,
   data,
 }: {
@@ -47,7 +49,6 @@ export default function DataTable<T extends Record<string, any>>({
 
   return (
     <div className="space-y-3">
-
       {/* 🔍 Search Bar */}
       <div className="flex justify-between items-center">
         <input
@@ -75,10 +76,12 @@ export default function DataTable<T extends Record<string, any>>({
                     <div className="flex items-center gap-1">
                       {flexRender(h.column.columnDef.header, h.getContext())}
                       <span className="text-[10px] text-slate-400">
-                        {{
+                        {({
                           asc: "↑",
                           desc: "↓",
-                        }[h.column.getIsSorted() as string] ?? null}
+                        } as Record<string, string>)[
+                          h.column.getIsSorted() as string
+                        ] ?? null}
                       </span>
                     </div>
                   </th>
@@ -93,28 +96,43 @@ export default function DataTable<T extends Record<string, any>>({
           </thead>
 
           <tbody>
-            {table.getRowModel().rows.map((r) => (
-              <tr
-                key={r.id}
-                className="border-t border-slate-100 hover:bg-slate-50 transition-colors"
-              >
-                {r.getVisibleCells().map((c) => (
-                  <td key={c.id} className="px-3 py-2 text-xs text-slate-700">
-                    {flexRender(c.column.columnDef.cell, c.getContext())}
-                  </td>
-                ))}
+            {table.getRowModel().rows.map((r) => {
+              const rowData = r.original as any;
+              const bookingId: string | undefined =
+                rowData._id || rowData.id || undefined;
 
-                {/* View Button */}
-                <td className="px-3 py-2 text-xs">
-                  <Link
-                    href={`/bookings/${r.original.id}`}
-                    className="px-3 py-1 rounded  text-slate-500 text-xs border transition"
-                  >
-                    View
-                  </Link>
-                </td>
-              </tr>
-            ))}
+              return (
+                <tr
+                  key={r.id}
+                  className="border-t border-slate-100 hover:bg-slate-50 transition-colors"
+                >
+                  {r.getVisibleCells().map((c) => (
+                    <td key={c.id} className="px-3 py-2 text-xs text-slate-700">
+                      {flexRender(c.column.columnDef.cell, c.getContext())}
+                    </td>
+                  ))}
+
+                  {/* View Button */}
+                  <td className="px-3 py-2 text-xs">
+                    {bookingId ? (
+                      <Link
+                        href={`/bookings/${bookingId}`}
+                        className="px-3 py-1 rounded border border-slate-200 text-slate-600 text-xs hover:bg-slate-50 transition"
+                      >
+                        View
+                      </Link>
+                    ) : (
+                      <button
+                        className="px-3 py-1 rounded border border-slate-100 text-slate-300 text-xs cursor-not-allowed"
+                        disabled
+                      >
+                        No ID
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
 
             {/* Empty State */}
             {table.getRowModel().rows.length === 0 && (
