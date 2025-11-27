@@ -23,7 +23,7 @@ type NavItem = NavLinkItem | NavActionItem;
 const nav: NavItem[] = [
   { href: "/" as Route, label: "Dashboard", icon: LayoutGrid },
   { href: "/orders" as Route, label: "Orders", icon: ShoppingCart },
-  { href: "/providers" as Route, label: "Providers", icon: ClipboardCheck },
+  { href: "/addons" as Route, label: "Add-ons", icon: ClipboardCheck },
   { href: "/categories" as Route, label: "Categories & Services", icon: Layers },
   { href: "/bookings" as Route, label: "Bookings", icon: Calendar },
   { href: "/customers" as Route, label: "Customers", icon: Users },
