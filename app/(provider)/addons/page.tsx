@@ -1,26 +1,65 @@
 // app/addons/page.tsx
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import AddAddonModal, { AddonPayload } from "./AddAddonModal";
+import { fetchAddons, createAddon, deleteAddon, AddonDto } from "@/app/services/addonsApi";
 
-type SavedAddon = AddonPayload & {
-  id: string;
+type SavedAddon = AddonDto & {
+  imagePreview: string | null; // frontend-only
 };
 
 export default function AddonsPage() {
   const [savedAddons, setSavedAddons] = useState<SavedAddon[]>([]);
   const [showModal, setShowModal] = useState(false);
+  const [loading, setLoading] = useState(true);
 
-  const handleSaveAddon = (data: AddonPayload) => {
-    const newAddon: SavedAddon = {
-      id: Date.now().toString(),
-      ...data,
+  // initial load
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const items = await fetchAddons(false); // admin/provider panel, show all
+        const mapped: SavedAddon[] = items.map((a) => ({
+          ...a,
+          imagePreview: null, // backend se abhi imageUrl handle nahi kar rahe
+        }));
+        setSavedAddons(mapped);
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setLoading(false);
+      }
     };
 
-    console.log("Addon payload ready to send:", newAddon);
+    load();
+  }, []);
 
-    setSavedAddons((prev) => [newAddon, ...prev]);
+  const handleSaveAddon = async (data: AddonPayload) => {
+    try {
+      const created = await createAddon(data);
+
+      const saved: SavedAddon = {
+        ...created,
+        imagePreview: data.imagePreview ?? null,
+      };
+
+      setSavedAddons((prev) => [saved, ...prev]);
+    } catch (err) {
+      console.error(err);
+      alert("Addon create nahi ho saka. Details console me dekho.");
+    }
+  };
+
+  const handleDeleteAddon = async (id: string) => {
+    if (!confirm("Are you sure you want to delete this add-on?")) return;
+
+    try {
+      await deleteAddon(id);
+      setSavedAddons((prev) => prev.filter((a) => a._id !== id));
+    } catch (err) {
+      console.error(err);
+      alert("Addon delete nahi ho saka.");
+    }
   };
 
   return (
@@ -49,7 +88,9 @@ export default function AddonsPage() {
 
         {/* Addons list */}
         <div className="bg-white rounded-2xl shadow-lg border border-slate-100 p-4 md:p-6">
-          {savedAddons.length === 0 ? (
+          {loading ? (
+            <p className="text-sm text-slate-500">Loading addons...</p>
+          ) : savedAddons.length === 0 ? (
             <p className="text-sm text-slate-500">
               Abhi koi add-on save nahi hua. Upar &quot;Add add-on&quot; button se
               naya add-on create karo.
@@ -58,7 +99,7 @@ export default function AddonsPage() {
             <div className="grid gap-4 md:gap-6 md:grid-cols-2">
               {savedAddons.map((addon) => (
                 <div
-                  key={addon.id}
+                  key={addon._id}
                   className="border border-slate-200 rounded-xl p-4 flex gap-3 bg-slate-50"
                 >
                   {addon.imagePreview && (
@@ -87,6 +128,14 @@ export default function AddonsPage() {
                       </span>
                     </div>
                   </div>
+
+                  {/* optional delete button */}
+                  <button
+                    onClick={() => handleDeleteAddon(addon._id)}
+                    className="text-[10px] text-rose-600 hover:text-rose-700 self-start"
+                  >
+                    Delete
+                  </button>
                 </div>
               ))}
             </div>
@@ -102,4 +151,4 @@ export default function AddonsPage() {
       </div>
     </main>
   );
-}
+}    
