@@ -1,67 +1,90 @@
 // app/api/provider/addons/route.ts
 import { NextRequest, NextResponse } from "next/server";
+import { cookies } from "next/headers";
+import { serverFetch } from "@/lib/serverFetch";
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
-if (!BACKEND_URL) {
-  console.warn(
-    "⚠️ NEXT_PUBLIC_BACKEND_URL is not set. Add it to your .env.local file."
-  );
+function base() {
+  const b =
+    process.env.API_BASE?.replace(/\/$/, "") ||
+    process.env.NEXT_PUBLIC_API_BASE?.replace(/\/$/, "");
+  if (!b) throw new Error("API_BASE (or NEXT_PUBLIC_API_BASE) is not set");
+  return b;
 }
 
-function backendUrl(path: string) {
-  // e.g. http://localhost:4000/api/provider/addons
-  return `${BACKEND_URL?.replace(/\/$/, "")}/api/provider/addons${path}`;
+async function authHeaders(): Promise<HeadersInit> {
+  const cookieStore = await cookies();
+  const token =
+    cookieStore.get("accessToken")?.value ||
+    cookieStore.get("token")?.value ||
+    null;
+
+  return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
-// GET /api/provider/addons  → proxy to backend GET /api/provider/addons
+// 🔹 GET /api/provider/addons  → backend GET /api/addons
 export async function GET(req: NextRequest) {
   try {
-    const query = req.nextUrl.searchParams.toString();
-    const url = backendUrl(query ? `?${query}` : "");
+    const qs = req.nextUrl.search || "";
+    const headers = await authHeaders();
 
-    const res = await fetch(url, {
+    const out = await serverFetch<any>(`${base()}/api/addons${qs}`, {
       method: "GET",
       headers: {
-        Authorization: req.headers.get("authorization") || "",
+        ...headers,
+        Accept: "application/json",
       },
-      cache: "no-store",
     });
 
-    const data = await res.json();
-
-    return NextResponse.json(data, { status: res.status });
-  } catch (err) {
-    console.error("[NEXT] /api/provider/addons GET error:", err);
+    // backend already deta hai { ok, items, ... } – hum pass-through kar dete hain
+    return NextResponse.json(out, { status: 200 });
+  } catch (e: any) {
+    console.error("GET /api/addons error:", e);
     return NextResponse.json(
-      { ok: false, error: "Failed to fetch addons" },
-      { status: 500 }
+      {
+        ok: false,
+        message: e?.message || "Failed to fetch provider addons",
+      },
+      { status: e?.status ?? 500 }
     );
   }
 }
 
-// POST /api/provider/addons → proxy to backend POST /api/provider/addons
+// 🔹 POST /api/provider/addons → backend POST /api/addons
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
+    const headers = await authHeaders();
 
-    const res = await fetch(backendUrl(""), {
+    const out = await serverFetch<any>(`${base()}/api/addons`, {
       method: "POST",
       headers: {
+        ...headers,
         "Content-Type": "application/json",
-        Authorization: req.headers.get("authorization") || "",
+        Accept: "application/json",
       },
       body: JSON.stringify(body),
     });
 
-    const data = await res.json();
-
-    return NextResponse.json(data, { status: res.status });
-  } catch (err) {
-    console.error("[NEXT] /api/provider/addons POST error:", err);
+    return NextResponse.json(out, { status: 200 });
+  } catch (e: any) {
+    console.error("POST /api/addons error:", e);
     return NextResponse.json(
-      { ok: false, error: "Failed to create addon" },
-      { status: 500 }
+      {
+        ok: false,
+        message: e?.message || "Failed to create addon",
+      },
+      { status: e?.status ?? 500 }
     );
   }
+}
+
+export async function OPTIONS() {
+  return NextResponse.json({ ok: true });
+}
+
+export async function HEAD() {
+  return NextResponse.json({ ok: true });
 }

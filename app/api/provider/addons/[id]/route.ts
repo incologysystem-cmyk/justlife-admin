@@ -1,34 +1,50 @@
-// app/api/provider/addons/[id]/route.ts
 import { NextRequest, NextResponse } from "next/server";
+import { cookies } from "next/headers";
+import { serverFetch } from "@/lib/serverFetch";
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
-function backendUrl(path: string) {
-  // e.g. http://localhost:4000/api/provider/addons/:id
-  return `${BACKEND_URL?.replace(/\/$/, "")}/api/provider/addons${path}`;
+function base() {
+  const b =
+    process.env.API_BASE?.replace(/\/$/, "") ||
+    process.env.NEXT_PUBLIC_API_BASE?.replace(/\/$/, "");
+  if (!b) throw new Error("API_BASE (or NEXT_PUBLIC_API_BASE) is not set");
+  return b;
 }
 
-// GET /api/provider/addons/:id
+async function authHeaders(): Promise<HeadersInit> {
+  const cookieStore = await cookies();
+  const token =
+    cookieStore.get("accessToken")?.value ||
+    cookieStore.get("token")?.value ||
+    null;
+
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+// GET /api/provider/addons/:id  → backend /api/addons/:id
 export async function GET(
-  req: NextRequest,
+  _req: NextRequest,
   { params }: { params: { id: string } }
 ) {
   try {
-    const res = await fetch(backendUrl(`/${params.id}`), {
+    const headers = await authHeaders();
+
+    const out = await serverFetch<any>(`${base()}/api/addons/${params.id}`, {
       method: "GET",
       headers: {
-        Authorization: req.headers.get("authorization") || "",
+        ...headers,
+        Accept: "application/json",
       },
-      cache: "no-store",
     });
 
-    const data = await res.json();
-    return NextResponse.json(data, { status: res.status });
-  } catch (err) {
-    console.error("[NEXT] /api/provider/addons/[id] GET error:", err);
+    return NextResponse.json(out, { status: 200 });
+  } catch (e: any) {
+    console.error("GET /api/addons/[id] error:", e);
     return NextResponse.json(
-      { ok: false, error: "Failed to fetch addon" },
-      { status: 500 }
+      { ok: false, message: e?.message || "Failed to fetch addon" },
+      { status: e?.status ?? 500 }
     );
   }
 }
@@ -40,47 +56,58 @@ export async function PATCH(
 ) {
   try {
     const body = await req.json();
+    const headers = await authHeaders();
 
-    const res = await fetch(backendUrl(`/${params.id}`), {
+    const out = await serverFetch<any>(`${base()}/api/addons/${params.id}`, {
       method: "PATCH",
       headers: {
+        ...headers,
         "Content-Type": "application/json",
-        Authorization: req.headers.get("authorization") || "",
+        Accept: "application/json",
       },
       body: JSON.stringify(body),
     });
 
-    const data = await res.json();
-    return NextResponse.json(data, { status: res.status });
-  } catch (err) {
-    console.error("[NEXT] /api/provider/addons/[id] PATCH error:", err);
+    return NextResponse.json(out, { status: 200 });
+  } catch (e: any) {
+    console.error("PATCH /api/addons/[id] error:", e);
     return NextResponse.json(
-      { ok: false, error: "Failed to update addon" },
-      { status: 500 }
+      { ok: false, message: e?.message || "Failed to update addon" },
+      { status: e?.status ?? 500 }
     );
   }
 }
 
 // DELETE /api/provider/addons/:id
 export async function DELETE(
-  req: NextRequest,
+  _req: NextRequest,
   { params }: { params: { id: string } }
 ) {
   try {
-    const res = await fetch(backendUrl(`/${params.id}`), {
+    const headers = await authHeaders();
+
+    const out = await serverFetch<any>(`${base()}/api/addons/${params.id}`, {
       method: "DELETE",
       headers: {
-        Authorization: req.headers.get("authorization") || "",
+        ...headers,
+        Accept: "application/json",
       },
     });
 
-    const data = await res.json();
-    return NextResponse.json(data, { status: res.status });
-  } catch (err) {
-    console.error("[NEXT] /api/provider/addons/[id] DELETE error:", err);
+    return NextResponse.json(out, { status: 200 });
+  } catch (e: any) {
+    console.error("DELETE /api/addons/[id] error:", e);
     return NextResponse.json(
-      { ok: false, error: "Failed to delete addon" },
-      { status: 500 }
+      { ok: false, message: e?.message || "Failed to delete addon" },
+      { status: e?.status ?? 500 }
     );
   }
+}
+
+export async function OPTIONS() {
+  return NextResponse.json({ ok: true });
+}
+
+export async function HEAD() {
+  return NextResponse.json({ ok: true });
 }

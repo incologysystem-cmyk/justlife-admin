@@ -1,18 +1,6 @@
-// app/addons/AddAddonModal.tsx
 "use client";
 
-import React, { useState, ChangeEvent, FormEvent } from "react";
-
-type AddonFormData = {
-  imageFile: File | null;
-  imagePreview: string | null;
-  title: string;
-  description: string;
-  summary: string;
-  includedRaw: string;
-  excludedRaw: string;
-  safetyNotice: string;
-};
+import React, { useMemo, useState, ChangeEvent, FormEvent } from "react";
 
 export type AddonPayload = {
   title: string;
@@ -22,12 +10,32 @@ export type AddonPayload = {
   excluded: string[];
   safetyNotice: string;
   learnMore: string;
-  imagePreview: string | null;
+  imageBase64?: string;
+  imagePreview?: string | null;
 };
 
-const initialFormState: AddonFormData = {
+type AddAddonModalProps = {
+  open: boolean;
+  onClose: () => void;
+  onSave: (data: AddonPayload) => Promise<void> | void;
+};
+
+type FormState = {
+  imageFile: File | null;
+  imagePreview: string | null;
+  imageBase64?: string;
+  title: string;
+  description: string;
+  summary: string;
+  includedRaw: string;
+  excludedRaw: string;
+  safetyNotice: string;
+};
+
+const initialFormState: FormState = {
   imageFile: null,
   imagePreview: null,
+  imageBase64: undefined,
   title: "",
   description: "",
   summary:
@@ -46,19 +54,45 @@ const initialFormState: AddonFormData = {
     "The safety and well-being of our professionals is very important to us. If weather conditions are harsh or unsafe, the balcony cleaning add-on may not be performed. In such cases, please contact us and we will issue a refund for this add-on.",
 };
 
-type AddAddonModalProps = {
-  open: boolean;
-  onClose: () => void;
-  onSave: (data: AddonPayload) => void;
-};
+function buildLearnMoreText(state: FormState) {
+  const includedItems = state.includedRaw
+    .split("\n")
+    .map((x) => x.trim())
+    .filter(Boolean);
+
+  const excludedItems = state.excludedRaw
+    .split("\n")
+    .map((x) => x.trim())
+    .filter(Boolean);
+
+  const includedBlock =
+    includedItems.length > 0
+      ? `What’s included:\n${includedItems.map((i) => `• ${i}`).join("\n")}`
+      : "";
+
+  const excludedBlock =
+    excludedItems.length > 0
+      ? `What’s excluded:\n${excludedItems.map((i) => `• ${i}`).join("\n")}`
+      : "";
+
+  const safetyBlock = state.safetyNotice
+    ? `Safety Notice:\n${state.safetyNotice}`
+    : "";
+
+  return [state.summary, includedBlock, excludedBlock, safetyBlock]
+    .filter(Boolean)
+    .join("\n\n");
+}
 
 export default function AddAddonModal({
   open,
   onClose,
   onSave,
 }: AddAddonModalProps) {
-  const [form, setForm] = useState<AddonFormData>(initialFormState);
+  const [form, setForm] = useState<FormState>(initialFormState);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const learnMorePreview = useMemo(() => buildLearnMoreText(form), [form]);
 
   if (!open) return null;
 
@@ -73,50 +107,33 @@ export default function AddAddonModal({
     const file = e.target.files?.[0] || null;
 
     if (!file) {
-      setForm((prev) => ({ ...prev, imageFile: null, imagePreview: null }));
+      setForm((prev) => ({
+        ...prev,
+        imageFile: null,
+        imagePreview: null,
+        imageBase64: undefined,
+      }));
       return;
     }
 
     const previewUrl = URL.createObjectURL(file);
-    setForm((prev) => ({
-      ...prev,
-      imageFile: file,
-      imagePreview: previewUrl,
-    }));
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const base64 = typeof reader.result === "string" ? reader.result : "";
+      setForm((prev) => ({
+        ...prev,
+        imageFile: file,
+        imagePreview: previewUrl,
+        imageBase64: base64, // data:image/...;base64,...
+      }));
+    };
+    reader.readAsDataURL(file);
   };
 
-  const buildLearnMoreText = () => {
-    const includedItems = form.includedRaw
-      .split("\n")
-      .map((x) => x.trim())
-      .filter(Boolean);
-
-    const excludedItems = form.excludedRaw
-      .split("\n")
-      .map((x) => x.trim())
-      .filter(Boolean);
-
-    const includedBlock =
-      includedItems.length > 0
-        ? `What’s included:\n${includedItems.map((i) => `• ${i}`).join("\n")}`
-        : "";
-
-    const excludedBlock =
-      excludedItems.length > 0
-        ? `What’s excluded:\n${excludedItems.map((i) => `• ${i}`).join("\n")}`
-        : "";
-
-    const safetyBlock = form.safetyNotice
-      ? `Safety Notice:\n${form.safetyNotice}`
-      : "";
-
-    return [form.summary, includedBlock, excludedBlock, safetyBlock]
-      .filter(Boolean)
-      .join("\n\n");
-  };
-
-  const handleSubmit = (e: FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
+    if (isSubmitting) return;
     setIsSubmitting(true);
 
     try {
@@ -130,36 +147,43 @@ export default function AddAddonModal({
         .map((x) => x.trim())
         .filter(Boolean);
 
-      const learnMore = buildLearnMoreText();
+      const learnMore = buildLearnMoreText(form);
 
       const payload: AddonPayload = {
-        title: form.title,
-        description: form.description,
-        summary: form.summary,
+        title: form.title.trim(),
+        description: form.description.trim(),
+        summary: form.summary.trim(),
         included,
         excluded,
-        safetyNotice: form.safetyNotice,
+        safetyNotice: form.safetyNotice.trim(),
         learnMore,
+        imageBase64: form.imageBase64,
         imagePreview: form.imagePreview,
       };
 
-      onSave(payload); // parent ko data
-      setForm(initialFormState); // reset
+      await onSave(payload);
+
+      // reset + close
+      setForm(initialFormState);
       onClose();
     } catch (err) {
       console.error(err);
-      alert("Kuch error aa gaya, console check karo.");
+      alert("Addon save karte waqt error aa gaya. Console check karo.");
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const learnMorePreview = buildLearnMoreText();
+  const handleClose = () => {
+    if (isSubmitting) return;
+    setForm(initialFormState);
+    onClose();
+  };
 
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"
-      onClick={onClose}
+      onClick={handleClose}
     >
       <div
         className="relative w-full max-w-3xl mx-4 max-h-[90vh] overflow-hidden rounded-2xl bg-white shadow-xl border border-slate-200"
@@ -172,14 +196,14 @@ export default function AddAddonModal({
           </h2>
           <button
             type="button"
-            onClick={onClose}
+            onClick={handleClose}
             className="text-slate-400 hover:text-slate-600 text-xl leading-none"
           >
             ×
           </button>
         </div>
 
-        {/* Modal body */}
+        {/* Modal body (scrollable) */}
         <div className="p-5 space-y-6 overflow-y-auto max-h-[70vh]">
           <form onSubmit={handleSubmit} className="space-y-6">
             {/* Image upload */}
@@ -209,7 +233,8 @@ export default function AddAddonModal({
                 )}
               </div>
               <p className="text-[10px] text-slate-400">
-                Recommended: square image, high quality (e.g. 800×800px).
+                Recommended: square image, high quality (e.g. 800×800px). Ye
+                image S3 bucket me upload ho jayegi.
               </p>
             </div>
 
@@ -318,8 +343,8 @@ export default function AddAddonModal({
                 className="w-full rounded-lg border border-slate-300 px-3 py-2 text-[11px] min-h-[80px] font-mono focus:outline-none focus:ring-2 focus:ring-slate-900 focus:border-slate-900"
               />
               <p className="text-[10px] text-slate-400">
-                Jo cheezen service main nahi hain, unko clear likho. Har line ek
-                item.
+                Jo cheezen service main nahi hain, unko clear likho. Har line
+                ek item.
               </p>
             </div>
 
@@ -340,8 +365,8 @@ export default function AddAddonModal({
                 className="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs min-h-[80px] focus:outline-none focus:ring-2 focus:ring-slate-900 focus:border-slate-900"
               />
               <p className="text-[10px] text-slate-400">
-                Weather issues, access issues, refund rules waghera Yahan
-                mention karo.
+                Weather issues, access issues, refund rules waghera yahan mention
+                karo.
               </p>
             </div>
 
@@ -349,8 +374,9 @@ export default function AddAddonModal({
             <div className="pt-2 flex justify-end gap-2">
               <button
                 type="button"
-                onClick={onClose}
+                onClick={handleClose}
                 className="inline-flex items-center justify-center rounded-lg border border-slate-300 px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                disabled={isSubmitting}
               >
                 Cancel
               </button>
@@ -364,7 +390,7 @@ export default function AddAddonModal({
             </div>
           </form>
 
-          {/* Learn more preview */}
+          {/* Learn more preview inside modal */}
           <div className="border-t border-slate-200 pt-3">
             <h3 className="text-[11px] font-semibold text-slate-700 mb-1">
               Learn More – Live Preview

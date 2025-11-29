@@ -1,4 +1,5 @@
 "use client";
+
 import type { AddonPayload } from "../(provider)/addons/AddAddonModal";
 
 export type AddonDto = {
@@ -51,7 +52,7 @@ export async function createAddon(payload: AddonPayload): Promise<AddonDto> {
       excluded: payload.excluded,
       safetyNotice: payload.safetyNotice,
       learnMore: payload.learnMore,
-      // imageUrl: future me jab upload karoge
+      imageBase64: payload.imageBase64, // 👈 S3 ke liye
     }),
   });
 
