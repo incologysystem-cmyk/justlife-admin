@@ -44,6 +44,9 @@ export default function ProviderDetailPage() {
 
   const handleApprove = async () => {
     if (!provider) return;
+    // extra safety: agar already approved hai to kuch na karo
+    if (provider.status === "approved") return;
+
     setActionLoading(true);
     setError(null);
     try {
@@ -60,10 +63,10 @@ export default function ProviderDetailPage() {
     }
   };
 
-  // Actual reject API call (modal se confirm hone ke baad chalega)
   const performReject = async () => {
     if (!provider) return;
     if (!adminComment.trim()) return;
+    if (provider.status === "approved") return; // approved ko reject nahi karna yahan se
 
     setActionLoading(true);
     setError(null);
@@ -79,7 +82,6 @@ export default function ProviderDetailPage() {
     }
   };
 
-  // Reject button click → sirf modal open
   const handleRejectClick = () => {
     if (!adminComment.trim()) return;
     setShowRejectConfirm(true);
@@ -97,6 +99,8 @@ export default function ProviderDetailPage() {
 
   const user =
     typeof provider.userId === "string" ? undefined : provider.userId;
+
+  const isApproved = provider.status === "approved";
 
   return (
     <div className="space-y-6 relative">
@@ -321,48 +325,50 @@ export default function ProviderDetailPage() {
         </div>
       </section>
 
-      {/* Admin actions */}
-      <section className="space-y-3 rounded-2xl border bg-white p-4 shadow-sm">
-        <h3 className="text-sm font-semibold">Admin Decision</h3>
+      {/* Admin actions – sirf jab provider approved NA ho */}
+      {!isApproved && (
+        <section className="space-y-3 rounded-2xl border bg-white p-4 shadow-sm">
+          <h3 className="text-sm font-semibold">Admin Decision</h3>
 
-        {provider.adminComment && (
-          <p className="text-xs text-slate-500">
-            Last admin comment: {provider.adminComment}
-          </p>
-        )}
+          {provider.adminComment && (
+            <p className="text-xs text-slate-500">
+              Last admin comment: {provider.adminComment}
+            </p>
+          )}
 
-        <textarea
-          className="w-full rounded-xl border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-          placeholder="Add internal comment for approval or reason for rejection…"
-          value={adminComment}
-          onChange={(e) => setAdminComment(e.target.value)}
-          rows={3}
-        />
+          <textarea
+            className="w-full rounded-xl border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            placeholder="Add internal comment for approval or reason for rejection…"
+            value={adminComment}
+            onChange={(e) => setAdminComment(e.target.value)}
+            rows={3}
+          />
 
-        {error && <p className="text-sm text-red-600">{error}</p>}
+          {error && <p className="text-sm text-red-600">{error}</p>}
 
-        <div className="flex flex-wrap gap-3">
-          <button
-            type="button"
-            onClick={handleApprove}
-            disabled={actionLoading}
-            className="inline-flex items-center rounded-xl bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-60"
-          >
-            {actionLoading ? "Processing…" : "Approve Provider"}
-          </button>
-          <button
-            type="button"
-            onClick={handleRejectClick}
-            disabled={actionLoading || !adminComment.trim()}
-            className="inline-flex items-center rounded-xl bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-60"
-          >
-            {actionLoading ? "Processing…" : "Reject Provider"}
-          </button>
-        </div>
-      </section>
+          <div className="flex flex-wrap gap-3">
+            <button
+              type="button"
+              onClick={handleApprove}
+              disabled={actionLoading}
+              className="inline-flex items-center rounded-xl bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-60"
+            >
+              {actionLoading ? "Processing…" : "Approve Provider"}
+            </button>
+            <button
+              type="button"
+              onClick={handleRejectClick}
+              disabled={actionLoading || !adminComment.trim()}
+              className="inline-flex items-center rounded-xl bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-60"
+            >
+              {actionLoading ? "Processing…" : "Reject Provider"}
+            </button>
+          </div>
+        </section>
+      )}
 
-      {/* Reject confirmation modal */}
-      {showRejectConfirm && (
+      {/* Reject confirmation modal – bhi sirf jab approved na ho */}
+      {!isApproved && showRejectConfirm && (
         <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40">
           <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-xl">
             <h4 className="text-base font-semibold text-slate-900">
@@ -370,8 +376,9 @@ export default function ProviderDetailPage() {
             </h4>
             <p className="mt-2 text-sm text-slate-600">
               Are you sure you want to reject this supplier? This action will
-              mark their profile as <span className="font-semibold">rejected</span>{" "}
-              and they will not be able to go live unless you approve them again.
+              mark their profile as{" "}
+              <span className="font-semibold">rejected</span> and they will not
+              be able to go live unless you approve them again.
             </p>
 
             <div className="mt-4 rounded-xl bg-slate-50 p-3 text-xs text-slate-700">

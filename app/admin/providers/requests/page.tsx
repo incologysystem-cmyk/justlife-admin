@@ -1,11 +1,9 @@
-// admin/app/providers/requests/page.tsx
 "use client";
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { fetchPendingProviders } from "@/app/services/adminProviders";
 import type { Provider } from "@/lib/api";
-// import { Table, Th, Td } from "../../../components/admin/Table";
 import { Table, Th, Td } from "@/app/components/admin/Table";
 
 export default function ProviderRequestsPage() {
@@ -34,10 +32,22 @@ export default function ProviderRequestsPage() {
 
   return (
     <div className="space-y-4">
-      <p className="text-sm text-slate-600">
-        All suppliers who have submitted their DED registration form and are
-        waiting for admin approval.
-      </p>
+
+      {/* 🔥 NEW BUTTON HERE */}
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-slate-600">
+          All suppliers who have submitted their DED registration form and are
+          waiting for admin approval.
+        </p>
+
+        <Link
+          href="/admin/providers/providerlist"
+          className="inline-flex items-center rounded-md px-4 py-2 text-sm font-medium text-slate-500 border shadow-sm  transition"
+        >
+          View All Providers
+        </Link>
+      </div>
+      {/* END BUTTON */}
 
       {loading && (
         <p className="text-sm text-slate-500">Loading requests…</p>
