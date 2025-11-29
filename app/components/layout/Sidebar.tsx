@@ -30,7 +30,7 @@ const nav: NavItem[] = [
   { href: "/customers" as Route, label: "Customers", icon: Users },
   { href: "/settings" as Route, label: "Settings", icon: Settings },
 
-   { href: "/promocodes" as Route, label: "Promocodes / Discounts", icon: Settings },
+   { href: "/promocodes" as Route, label: "Promocodes & Discounts", icon: Settings },
 
     { href: "/finance" as Route, label: "Payments & Payouts", icon: Settings },
 
