@@ -14,7 +14,9 @@ const ADMIN_PREFIXES = [
   "/customers",
   "/settings",
   "/addons",
-  "providers"
+  "/providers",
+  "/promocodes",
+  "/finance"
 ];
 
 // returns true if pathname is exactly "/" or starts with any allowed prefix (except "/" which must be exact)

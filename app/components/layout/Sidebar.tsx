@@ -20,6 +20,7 @@ type NavLinkItem = { label: string; icon: LucideIcon; href: Route; action?: unde
 type NavActionItem = { label: string; icon: LucideIcon; action: "logout"; href?: undefined };
 type NavItem = NavLinkItem | NavActionItem;
 
+
 const nav: NavItem[] = [
   { href: "/" as Route, label: "Dashboard", icon: LayoutGrid },
   { href: "/orders" as Route, label: "Orders", icon: ShoppingCart },
@@ -28,8 +29,15 @@ const nav: NavItem[] = [
   { href: "/bookings" as Route, label: "Bookings", icon: Calendar },
   { href: "/customers" as Route, label: "Customers", icon: Users },
   { href: "/settings" as Route, label: "Settings", icon: Settings },
-  { action: "logout", label: "Logout", icon: LogOut }, // action item
+
+   { href: "/promocodes" as Route, label: "Promocodes / Discounts", icon: Settings },
+
+    { href: "/finance" as Route, label: "Payments & Payouts", icon: Settings },
+
+
+  { action: "logout", label: "Logout", icon: LogOut },
 ];
+
 
 export function Sidebar() {
   const pathname = usePathname() || "/";
