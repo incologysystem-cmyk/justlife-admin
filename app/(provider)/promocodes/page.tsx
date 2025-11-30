@@ -1,14 +1,21 @@
+// src/app/provider/promocodes/page.tsx
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import type { ColumnDef } from "@tanstack/react-table";
 import DataTable from "@/app/components/tables/DataTable";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Loader2, Plus } from "lucide-react";
 
-type PromoStatus = "active" | "scheduled" | "expired" | "disabled";
-type DiscountType = "percentage" | "fixed";
+import {
+  fetchProviderPromocodes,
+  type PromoStatus,
+  type DiscountType,
+  type ProviderPromocode,
+} from "@/app/services/providerPromocodes";
+// import { CreatePromocodeModal } from "./CreatePromocodeModal";
+import { CreatePromocodeModal } from "@/app/components/provider/promocodes/CreatePromocodeModal";
 
 type PromocodeRow = {
   id: string;
@@ -105,52 +112,46 @@ export default function PromocodesPage() {
   const [rows, setRows] = useState<PromocodeRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [createOpen, setCreateOpen] = useState(false);
 
-  const loadPromocodes = async (status: "" | PromoStatus) => {
-    try {
-      setLoading(true);
-      setError(null);
+  const loadPromocodes = useCallback(
+    async (status: "" | PromoStatus) => {
+      try {
+        setLoading(true);
+        setError(null);
 
-      const query = status ? `?status=${status}` : "";
-      // yahan tum baad me apna Next proxy laga sakte ho
-      const res = await fetch(`/api/admin/promocodes${query}`, {
-        credentials: "include",
-      });
+        const { promocodes } = await fetchProviderPromocodes(status);
 
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        throw new Error(body?.message || "Failed to load promocodes");
+        const mapped: PromocodeRow[] = promocodes.map(
+          (p: ProviderPromocode) => ({
+            id: String(p._id),
+            code: p.code,
+            description: p.description,
+            discountType: p.discountType,
+            amount: p.amount,
+            currency: p.currency,
+            maxUsage: p.maxUsage,
+            usedCount: p.usedCount,
+            startsAt: p.startsAt,
+            endsAt: p.endsAt,
+            status: p.status,
+          })
+        );
+
+        setRows(mapped);
+      } catch (err: any) {
+        console.error("Error loading promocodes:", err);
+        setError(err.message || "Something went wrong");
+      } finally {
+        setLoading(false);
       }
-
-      const data = await res.json();
-      const items = (data.promocodes || []) as any[];
-
-      const mapped: PromocodeRow[] = items.map((p) => ({
-        id: String(p._id),
-        code: p.code,
-        description: p.description,
-        discountType: p.discountType as DiscountType,
-        amount: p.amount,
-        currency: p.currency,
-        maxUsage: p.maxUsage,
-        usedCount: p.usedCount,
-        startsAt: p.startsAt,
-        endsAt: p.endsAt,
-        status: p.status as PromoStatus,
-      }));
-
-      setRows(mapped);
-    } catch (err: any) {
-      console.error("Error loading promocodes:", err);
-      setError(err.message || "Something went wrong");
-    } finally {
-      setLoading(false);
-    }
-  };
+    },
+    []
+  );
 
   useEffect(() => {
     loadPromocodes(statusFilter);
-  }, [statusFilter]);
+  }, [statusFilter, loadPromocodes]);
 
   return (
     <div className="space-y-4">
@@ -161,12 +162,12 @@ export default function PromocodesPage() {
             Promocodes & Discounts
           </h1>
           <p className="text-sm text-muted-foreground">
-            Create and manage discount codes for campaigns and partners.
+            Create and manage discount codes for your services.
           </p>
         </div>
 
+        {/* Status + New button */}
         <div className="flex flex-wrap gap-3 items-center">
-          {/* Status filter */}
           <div className="inline-flex rounded-lg border bg-muted p-1 text-xs sm:text-sm">
             {STATUS_FILTERS.map((opt) => (
               <button
@@ -185,8 +186,11 @@ export default function PromocodesPage() {
             ))}
           </div>
 
-          {/* Create button (abhi sirf dummy, baad me form ya drawer open kar sakte ho) */}
-          <Button className="inline-flex items-center gap-2">
+          <Button
+            className="inline-flex items-center gap-2"
+            type="button"
+            onClick={() => setCreateOpen(true)}
+          >
             <Plus className="h-4 w-4" />
             New Promocode
           </Button>
@@ -208,6 +212,13 @@ export default function PromocodesPage() {
       ) : (
         <DataTable columns={columns} data={rows} />
       )}
+
+      {/* Modal for creating new promo */}
+      <CreatePromocodeModal
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        onCreated={() => loadPromocodes(statusFilter)}
+      />
     </div>
   );
 }
