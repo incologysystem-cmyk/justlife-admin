@@ -1,85 +1,127 @@
 // components/forms/parts/AddonEditor.tsx
 "use client";
-import { z } from "zod";
-import { useState } from "react";
-import { Plus, Trash } from "lucide-react";
 
-export const AddonSchema = z.object({
-  name: z.string().trim().min(1),
-  price: z.coerce.number().min(0),
-  maxQty: z.coerce.number().min(1).default(1),
-});
-export type AddonPayload = z.infer<typeof AddonSchema>;
+import { useEffect, useState } from "react";
+import { fetchAddons, type AddonDto } from "@/app/services/addonsApi";
 
-export default function AddonEditor({
-  value,
-  onChange,
-}: {
-  value: AddonPayload[];
-  onChange: (v: AddonPayload[]) => void;
-}) {
-  const [draft, setDraft] = useState<AddonPayload>({ name: "", price: 0, maxQty: 1 });
+type AddonEditorProps = {
+  /** Selected addon IDs for this service */
+  value: string[];
+  /** Called when selection changes */
+  onChange: (ids: string[]) => void;
+};
 
-  function add() {
-    const parsed = AddonSchema.safeParse(draft);
-    if (!parsed.success) return;
-    onChange([parsed.data, ...value]);
-    setDraft({ name: "", price: 0, maxQty: 1 });
-  }
+export default function AddonEditor({ value, onChange }: AddonEditorProps) {
+  const [addons, setAddons] = useState<AddonDto[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  function remove(i: number) {
-    const next = [...value];
-    next.splice(i, 1);
-    onChange(next);
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const items = await fetchAddons(false); // admin/provider: show all
+        setAddons(items);
+      } catch (err) {
+        console.error(err);
+        setError("Failed to load add-ons. Please try again.");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    load();
+  }, []);
+
+  function toggle(id: string) {
+    if (value.includes(id)) {
+      onChange(value.filter((x) => x !== id));
+    } else {
+      onChange([...value, id]);
+    }
   }
 
   return (
     <div className="bg-card border border-border rounded-xl2 p-4 space-y-3">
-      <div className="text-sm font-medium">Add-ons</div>
-      <div className="grid md:grid-cols-3 gap-3">
-        <input
-          placeholder="Name (e.g., Stain Removal)"
-          value={draft.name}
-          onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }))}
-          className="rounded border border-border bg-background px-3 py-2 text-sm"
-        />
-        <input
-          type="number"
-          min={0}
-          step="0.01"
-          placeholder="Price"
-          value={draft.price}
-          onChange={(e) => setDraft((d) => ({ ...d, price: Number(e.target.value) }))}
-          className="rounded border border-border bg-background px-3 py-2 text-sm"
-        />
-        <div className="flex">
-          <input
-            type="number"
-            min={1}
-            placeholder="Max qty"
-            value={draft.maxQty}
-            onChange={(e) => setDraft((d) => ({ ...d, maxQty: Number(e.target.value) }))}
-            className="flex-1 rounded-l border border-border bg-background px-3 py-2 text-sm"
-          />
-          <button type="button" onClick={add} className="px-3 rounded-r border border-emerald-500/30 bg-emerald-500/20">
-            <Plus size={16} />
-          </button>
-        </div>
+      <div className="flex items-center justify-between">
+        <div className="text-sm font-medium text-gray-900">Add-ons</div>
+        {value.length > 0 && (
+          <div className="text-[11px] text-gray-700">
+            Selected: <span className="font-semibold">{value.length}</span>
+          </div>
+        )}
       </div>
 
-      {value.length > 0 && (
-        <div className="text-xs text-white/70">
-          {value.map((v, i) => (
-            <div key={i} className="flex items-center justify-between border-t border-border py-2">
-              <div>
-                <div className="font-medium">{v.name}</div>
-                <div className="text-white/60">AED {v.price.toFixed(2)} · Max qty {v.maxQty}</div>
-              </div>
-              <button type="button" onClick={() => remove(i)} className="px-2 py-1 rounded border border-border hover:bg-[#0d1018]">
-                <Trash size={14} />
-              </button>
-            </div>
-          ))}
+      {loading ? (
+        <p className="text-xs text-gray-700">Loading add-ons…</p>
+      ) : error ? (
+        <p className="text-xs text-red-600">{error}</p>
+      ) : addons.length === 0 ? (
+        <p className="text-xs text-gray-700">
+          No global add-ons found. Create add-ons from the{" "}
+          <span className="font-semibold">Add-ons</span> page first.
+        </p>
+      ) : (
+        <div className="flex flex-col gap-2 text-xs text-gray-900">
+          {addons.map((addon) => {
+            const id = (addon as any)._id as string;
+            const selected = value.includes(id);
+            const price = (addon as any).price as number | undefined;
+            const maxQty =
+              (addon as any).maxQty != null ? (addon as any).maxQty : 1;
+            const imageUrl = (addon as any).imageUrl as string | undefined;
+
+            return (
+              <label
+                key={id}
+                className="flex items-start gap-3 border border-border rounded-lg p-2 hover:bg-gray-50 cursor-pointer"
+              >
+                {/* Checkbox */}
+                <input
+                  type="checkbox"
+                  checked={selected}
+                  onChange={() => toggle(id)}
+                  className="mt-1"
+                />
+
+                {/* Optional image */}
+                {imageUrl && (
+                  <div className="w-12 h-12 rounded-md overflow-hidden border border-border flex-shrink-0">
+                    <img
+                      src={imageUrl}
+                      alt={(addon as any).title ?? "Addon image"}
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                )}
+
+                {/* Text content */}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-semibold text-gray-900 truncate">
+                      {(addon as any).title ??
+                        (addon as any).name ??
+                        "Untitled add-on"}
+                    </span>
+                    {typeof price === "number" && (
+                      <span className="text-[11px] text-gray-800 whitespace-nowrap">
+                        AED {price.toFixed(2)}
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="text-[11px] text-gray-700 mt-0.5">
+                    Max qty: {maxQty}
+                  </div>
+
+                  {(addon as any).description && (
+                    <div className="text-[11px] text-gray-600 mt-0.5 line-clamp-2">
+                      {(addon as any).description}
+                    </div>
+                  )}
+                </div>
+              </label>
+            );
+          })}
         </div>
       )}
     </div>
