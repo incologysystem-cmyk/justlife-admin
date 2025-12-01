@@ -52,7 +52,7 @@ export default function ProviderPromocodeDetailPage() {
   }, [id]);
 
   const goBack = () => {
-    router.push("/provider/promocodes");
+    router.push("/promocodes");
   };
 
   const handleDelete = async () => {
@@ -61,7 +61,7 @@ export default function ProviderPromocodeDetailPage() {
       setDeleting(true);
       setDeleteError(null);
       await deleteProviderPromocode(promo._id);
-      router.push("/provider/promocodes");
+      router.push("/promocodes");
     } catch (err: any) {
       console.error("Delete promocode error:", err);
       setDeleteError(err?.message || "Failed to delete promocode");

@@ -1,3 +1,4 @@
+// src/app/services/providerPromocodes.ts
 "use client";
 
 export type PromoStatus = "active" | "scheduled" | "expired" | "disabled";
@@ -66,7 +67,7 @@ export async function fetchProviderPromocodeById(
   };
 }
 
-// ✅ CREATE: POST /api/provider/promocodes  → backend POST {{baseUrl}}/api/promo
+// ✅ CREATE: POST /api/provider/promocodes
 export type CreatePromocodePayload = {
   code: string;
   description?: string;
@@ -100,4 +101,46 @@ export async function createProviderPromocode(
   return {
     promocode: data.promocode as ProviderPromocode,
   };
+}
+
+// ✅ UPDATE: PATCH /api/provider/promocodes/:id
+export type UpdatePromocodePayload = Partial<CreatePromocodePayload> & {
+  status?: PromoStatus;
+};
+
+export async function updateProviderPromocode(
+  id: string,
+  payload: UpdatePromocodePayload
+): Promise<{ promocode: ProviderPromocode }> {
+  const res = await fetch(`/api/provider/promocodes/${id}`, {
+    method: "PATCH",
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body?.message || "Failed to update promocode");
+  }
+
+  const data = await res.json();
+  return {
+    promocode: data.promocode as ProviderPromocode,
+  };
+}
+
+// ✅ DELETE: DELETE /api/provider/promocodes/:id
+export async function deleteProviderPromocode(id: string): Promise<void> {
+  const res = await fetch(`/api/provider/promocodes/${id}`, {
+    method: "DELETE",
+    credentials: "include",
+  });
+
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body?.message || "Failed to delete promocode");
+  }
 }
