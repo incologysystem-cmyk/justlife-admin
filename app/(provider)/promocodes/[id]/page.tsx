@@ -1,22 +1,25 @@
 // src/app/provider/promocodes/[id]/page.tsx
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import {
   fetchProviderPromocodeById,
-  deleteProviderPromocode,   // ✅ NEW
+  deleteProviderPromocode,
   type ProviderPromocode,
   type PromoStatus,
 } from "@/app/services/providerPromocodes";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Loader2, Trash2, Pencil } from "lucide-react";
+import { CreatePromocodeModal } from "@/app/components/provider/promocodes/CreatePromocodeModal";
 
 export default function ProviderPromocodeDetailPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
-  const id = params.id;
+
+  const idRaw = params?.id;
+  const id = Array.isArray(idRaw) ? idRaw[0] : idRaw;
 
   const [promo, setPromo] = useState<ProviderPromocode | null>(null);
   const [loading, setLoading] = useState(true);
@@ -26,30 +29,31 @@ export default function ProviderPromocodeDetailPage() {
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
-  useEffect(() => {
-    let mounted = true;
+  const [editOpen, setEditOpen] = useState(false);
 
-    (async () => {
-      try {
-        setLoading(true);
-        setError(null);
+  const loadPromocode = useCallback(async () => {
+    if (!id) {
+      setError("Invalid promocode id");
+      setLoading(false);
+      return;
+    }
 
-        const { promocode } = await fetchProviderPromocodeById(id);
-        if (!mounted) return;
-        setPromo(promocode);
-      } catch (err: any) {
-        if (!mounted) return;
-        console.error("Failed to load promocode:", err);
-        setError(err?.message || "Failed to load promocode");
-      } finally {
-        if (mounted) setLoading(false);
-      }
-    })();
-
-    return () => {
-      mounted = false;
-    };
+    try {
+      setLoading(true);
+      setError(null);
+      const { promocode } = await fetchProviderPromocodeById(id);
+      setPromo(promocode);
+    } catch (err: any) {
+      console.error("Failed to load promocode:", err);
+      setError(err?.message || "Failed to load promocode");
+    } finally {
+      setLoading(false);
+    }
   }, [id]);
+
+  useEffect(() => {
+    loadPromocode();
+  }, [loadPromocode]);
 
   const goBack = () => {
     router.push("/promocodes");
@@ -61,7 +65,7 @@ export default function ProviderPromocodeDetailPage() {
       setDeleting(true);
       setDeleteError(null);
       await deleteProviderPromocode(promo._id);
-      router.push("/promocodes");
+      router.push("/provider/promocodes");
     } catch (err: any) {
       console.error("Delete promocode error:", err);
       setDeleteError(err?.message || "Failed to delete promocode");
@@ -70,11 +74,15 @@ export default function ProviderPromocodeDetailPage() {
     }
   };
 
-  // (Future) Update flow – e.g. open edit modal or navigate to /edit page
   const handleUpdate = () => {
-    // abhi sirf placeholder – baad me edit modal / page bana sakte ho
-    // router.push(`/provider/promocodes/${id}/edit`);
-    console.log("Update promo clicked", promo);
+    setEditOpen(true);
+  };
+
+  const fmtDateTime = (value?: string) => {
+    if (!value) return "—";
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return "—";
+    return d.toLocaleString();
   };
 
   if (loading) {
@@ -129,13 +137,6 @@ export default function ProviderPromocodeDetailPage() {
       </div>
     );
   }
-
-  const fmtDateTime = (value?: string) => {
-    if (!value) return "—";
-    const d = new Date(value);
-    if (Number.isNaN(d.getTime())) return "—";
-    return d.toLocaleString();
-  };
 
   const isPercentage = promo.discountType === "percentage";
   const discountLabel = isPercentage
@@ -397,6 +398,30 @@ export default function ProviderPromocodeDetailPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Edit modal */}
+      {promo && (
+        <CreatePromocodeModal
+          open={editOpen}
+          onOpenChange={setEditOpen}
+          mode="edit"
+          initial={{
+            id: promo._id,
+            code: promo.code,
+            description: promo.description,
+            serviceId: promo.serviceId,
+            discountType: promo.discountType,
+            amount: promo.amount,
+            currency: promo.currency,
+            maxUsage: promo.maxUsage,
+            startsAt: promo.startsAt,
+            endsAt: promo.endsAt,
+          }}
+          onUpdated={async () => {
+            await loadPromocode();
+          }}
+        />
       )}
     </div>
   );

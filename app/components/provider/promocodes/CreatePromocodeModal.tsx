@@ -1,9 +1,10 @@
 // src/app/provider/promocodes/CreatePromocodeModal.tsx
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   createProviderPromocode,
+  updateProviderPromocode,
   type DiscountType,
 } from "@/app/services/providerPromocodes";
 import {
@@ -18,17 +19,43 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 
-type Props = {
+type BaseProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onCreated?: () => void;
+  onUpdated?: () => void;
+};
+
+type Mode = "create" | "edit";
+
+type InitialData = {
+  id: string;
+  code: string;
+  description?: string;
+  serviceId?: string;
+  discountType: DiscountType;
+  amount: number;
+  currency?: string;
+  maxUsage?: number;
+  startsAt?: string;
+  endsAt?: string;
+};
+
+type Props = BaseProps & {
+  mode?: Mode;          // default: "create"
+  initial?: InitialData | null;
 };
 
 export function CreatePromocodeModal({
   open,
   onOpenChange,
   onCreated,
+  onUpdated,
+  mode = "create",
+  initial,
 }: Props) {
+  const isEdit = mode === "edit";
+
   const [code, setCode] = useState("");
   const [description, setDescription] = useState("");
   const [serviceId, setServiceId] = useState("");
@@ -55,6 +82,36 @@ export function CreatePromocodeModal({
     setEndsAt("");
     setError(null);
   };
+
+  // 🟢 Edit mode me jab modal open ho aur initial aaye toh fields prefill karo
+  useEffect(() => {
+    if (open && isEdit && initial) {
+      setCode(initial.code || "");
+      setDescription(initial.description || "");
+      setServiceId(initial.serviceId || "");
+      setDiscountType(initial.discountType || "percentage");
+      setAmount(initial.amount ?? "");
+      setCurrency(initial.currency || "AED");
+      setMaxUsage(initial.maxUsage ?? "");
+      setStartsAt(
+        initial.startsAt
+          ? new Date(initial.startsAt).toISOString().slice(0, 16)
+          : ""
+      );
+      setEndsAt(
+        initial.endsAt
+          ? new Date(initial.endsAt).toISOString().slice(0, 16)
+          : ""
+      );
+      setError(null);
+    }
+
+    if (open && !isEdit) {
+      // create mode → always fresh form
+      resetForm();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, isEdit, initial?.id]);
 
   const handleClose = (nextOpen: boolean) => {
     if (!nextOpen && !submitting) {
@@ -83,7 +140,7 @@ export function CreatePromocodeModal({
     try {
       setSubmitting(true);
 
-      await createProviderPromocode({
+      const payload = {
         code: code.trim(),
         description: description.trim() || undefined,
         serviceId: serviceId.trim(),
@@ -96,18 +153,48 @@ export function CreatePromocodeModal({
             : undefined,
         startsAt: startsAt || undefined,
         endsAt: endsAt || undefined,
-      });
+      };
+
+      if (isEdit && initial?.id) {
+        // 🔁 UPDATE FLOW
+        await updateProviderPromocode(initial.id, payload);
+        onUpdated?.();
+      } else {
+        // ➕ CREATE FLOW
+        await createProviderPromocode(payload);
+        onCreated?.();
+      }
 
       resetForm();
-      onCreated?.();
       onOpenChange(false);
     } catch (err: any) {
-      console.error("Create promocode error:", err);
-      setError(err.message || "Failed to create promocode");
+      console.error(
+        isEdit ? "Update promocode error:" : "Create promocode error:",
+        err
+      );
+      setError(
+        err?.message ||
+          (isEdit
+            ? "Failed to update promocode"
+            : "Failed to create promocode")
+      );
     } finally {
       setSubmitting(false);
     }
   };
+
+  const title = isEdit ? "Update Promocode" : "Create New Promocode";
+  const descriptionText = isEdit
+    ? "Modify this discount code. Changes will apply to future validations; past bookings will remain unchanged."
+    : "Set up a discount code for one of your services. You can configure percentage or fixed amount discounts, usage limits, and validity dates.";
+
+  const submitLabel = isEdit
+    ? submitting
+      ? "Updating…"
+      : "Update Promocode"
+    : submitting
+    ? "Creating…"
+    : "Create Promocode";
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
@@ -122,18 +209,13 @@ export function CreatePromocodeModal({
         {/* Inner wrapper so padding scroll ke andar rahe */}
         <div className="p-6 space-y-4">
           <DialogHeader className="space-y-2">
-            <DialogTitle>Create New Promocode</DialogTitle>
+            <DialogTitle>{title}</DialogTitle>
             <DialogDescription>
-              Set up a discount code for one of your services. You can
-              configure percentage or fixed amount discounts, usage limits,
-              and validity dates.
+              {descriptionText}
             </DialogDescription>
           </DialogHeader>
 
-          <form
-            onSubmit={handleSubmit}
-            className="space-y-4 pt-2"
-          >
+          <form onSubmit={handleSubmit} className="space-y-4 pt-2">
             {/* Code */}
             <div className="space-y-1">
               <Label htmlFor="promo-code">Promocode</Label>
@@ -286,7 +368,7 @@ export function CreatePromocodeModal({
                 Cancel
               </Button>
               <Button type="submit" disabled={submitting}>
-                {submitting ? "Creating…" : "Create Promocode"}
+                {submitLabel}
               </Button>
             </div>
           </form>
