@@ -1,4 +1,3 @@
-// src/app/services/providerPromocodes.ts
 "use client";
 
 export type PromoStatus = "active" | "scheduled" | "expired" | "disabled";
@@ -16,6 +15,13 @@ export type ProviderPromocode = {
   startsAt?: string;
   endsAt?: string;
   status: PromoStatus;
+
+  // detail page ke liye extra fields:
+  providerId?: string;
+  serviceId?: string;
+  createdBy?: string;
+  createdAt?: string;
+  updatedAt?: string;
 };
 
 // ✅ LIST: GET /api/provider/promocodes?status=active
@@ -37,6 +43,26 @@ export async function fetchProviderPromocodes(
   const data = await res.json();
   return {
     promocodes: (data.promocodes || []) as ProviderPromocode[],
+  };
+}
+
+// ✅ DETAIL: GET /api/provider/promocodes/:id
+export async function fetchProviderPromocodeById(
+  id: string
+): Promise<{ promocode: ProviderPromocode }> {
+  const res = await fetch(`/api/provider/promocodes/${id}`, {
+    credentials: "include",
+    cache: "no-store",
+  });
+
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body?.message || "Failed to load promocode");
+  }
+
+  const data = await res.json();
+  return {
+    promocode: data.promocode as ProviderPromocode,
   };
 }
 

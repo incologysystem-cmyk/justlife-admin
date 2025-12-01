@@ -14,7 +14,6 @@ import {
   type DiscountType,
   type ProviderPromocode,
 } from "@/app/services/providerPromocodes";
-// import { CreatePromocodeModal } from "./CreatePromocodeModal";
 import { CreatePromocodeModal } from "@/app/components/provider/promocodes/CreatePromocodeModal";
 
 type PromocodeRow = {
@@ -210,7 +209,9 @@ export default function PromocodesPage() {
           Loading promocodes…
         </div>
       ) : (
-        <DataTable columns={columns} data={rows} />
+        <DataTable columns={columns} data={rows} 
+         viewBasePath="/promocodes"
+        />
       )}
 
       {/* Modal for creating new promo */}

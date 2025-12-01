@@ -1,7 +1,9 @@
+// src/app/components/tables/DataTable.tsx
 "use client";
 
 import * as React from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import {
   ColumnDef,
   flexRender,
@@ -12,17 +14,20 @@ import {
   useReactTable,
 } from "@tanstack/react-table";
 
-export default function DataTable<
-  T extends Record<string, any> & { _id?: string; id?: string }
->({
+type BaseRow = Record<string, any> & { _id?: string; id?: string };
+
+export default function DataTable<T extends BaseRow>({
   columns,
   data,
+  viewBasePath, // ✅ NEW
 }: {
   columns: ColumnDef<T, any>[];
   data: T[];
+  viewBasePath?: string;
 }) {
   const [sorting, setSorting] = React.useState<SortingState>([]);
   const [query, setQuery] = React.useState("");
+  const pathname = usePathname();
 
   // 🔍 Client-side Search Filter
   const filteredData = React.useMemo(() => {
@@ -47,13 +52,32 @@ export default function DataTable<
     getPaginationRowModel: getPaginationRowModel(),
   });
 
+  // ✅ Helper to decide "View" URL
+  const getRowViewHref = (rowData: any): string | null => {
+    const id: string | undefined = rowData._id || rowData.id || undefined;
+    if (!id) return null;
+
+    // 1) Explicit viewBasePath from parent (recommended)
+    if (viewBasePath) {
+      return `${viewBasePath}/${id}`;
+    }
+
+    // 2) Fallback heuristics (old behaviour)
+    if (pathname.startsWith("/promocodes")) {
+      return `/promocodes/${id}`;
+    }
+
+    // Default: treat as bookings table
+    return `/bookings/${id}`;
+  };
+
   return (
     <div className="space-y-3">
       {/* 🔍 Search Bar */}
       <div className="flex justify-between items-center">
         <input
           type="text"
-          placeholder="Search by Booking ID, Customer, Phone, Email..."
+          placeholder="Search by ID, Customer, Phone, Email..."
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           className="w-full max-w-xs rounded-md border border-slate-300 px-3 py-2 text-sm 
@@ -98,8 +122,7 @@ export default function DataTable<
           <tbody>
             {table.getRowModel().rows.map((r) => {
               const rowData = r.original as any;
-              const bookingId: string | undefined =
-                rowData._id || rowData.id || undefined;
+              const href = getRowViewHref(rowData);
 
               return (
                 <tr
@@ -114,9 +137,9 @@ export default function DataTable<
 
                   {/* View Button */}
                   <td className="px-3 py-2 text-xs">
-                    {bookingId ? (
+                    {href ? (
                       <Link
-                        href={`/bookings/${bookingId}`}
+                        href={href}
                         className="px-3 py-1 rounded border border-slate-200 text-slate-600 text-xs hover:bg-slate-50 transition"
                       >
                         View
