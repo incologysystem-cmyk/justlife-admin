@@ -1,0 +1,27 @@
+// app/(admin)/layout.tsx
+import "@/app/globals.css";
+import type { Metadata } from "next";
+import AppShell from "./components/layout/AppShell";
+import { Toaster } from "sonner";
+
+export const metadata: Metadata = {
+  title: "Justlife Admin",
+  description: "Operations dashboard",
+};
+
+export default function AdminLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return (
+    <html lang="en">
+      <body>
+        <AppShell>{children}</AppShell>
+
+        {/* 👇 Sonner toaster yahan mount hoga */}
+        <Toaster richColors position="top-center" />
+      </body>
+    </html>
+  );
+}
