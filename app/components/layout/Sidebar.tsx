@@ -8,18 +8,31 @@ import {
   Layers,
   Users,
   ShoppingCart,
-  Settings,
   Calendar,
   LayoutGrid,
   ClipboardCheck,
   LogOut,
+  Clock,
+  TicketPercent,
+  Wallet,
   type LucideIcon,
 } from "lucide-react";
 
-type NavLinkItem = { label: string; icon: LucideIcon; href: Route; action?: undefined };
-type NavActionItem = { label: string; icon: LucideIcon; action: "logout"; href?: undefined };
-type NavItem = NavLinkItem | NavActionItem;
+type NavLinkItem = {
+  label: string;
+  icon: LucideIcon;
+  href: Route;
+  action?: undefined;
+};
 
+type NavActionItem = {
+  label: string;
+  icon: LucideIcon;
+  action: "logout";
+  href?: undefined;
+};
+
+type NavItem = NavLinkItem | NavActionItem;
 
 const nav: NavItem[] = [
   { href: "/" as Route, label: "Dashboard", icon: LayoutGrid },
@@ -28,16 +41,24 @@ const nav: NavItem[] = [
   { href: "/categories" as Route, label: "Categories & Services", icon: Layers },
   { href: "/bookings" as Route, label: "Bookings", icon: Calendar },
   { href: "/customers" as Route, label: "Customers", icon: Users },
-  { href: "/settings" as Route, label: "Settings", icon: Settings },
 
-   { href: "/promocodes" as Route, label: "Promocodes & Discounts", icon: Settings },
+  // ✅ Availability (fixed spelling + proper icon)
+  { href: "/availability" as Route, label: "Availability", icon: Clock },
 
-    { href: "/finance" as Route, label: "Payments & Payouts", icon: Settings },
-
+  // ✅ Dedicated business icons
+  {
+    href: "/promocodes" as Route,
+    label: "Promocodes & Discounts",
+    icon: TicketPercent,
+  },
+  {
+    href: "/finance" as Route,
+    label: "Payments & Payouts",
+    icon: Wallet,
+  },
 
   { action: "logout", label: "Logout", icon: LogOut },
 ];
-
 
 export function Sidebar() {
   const pathname = usePathname() || "/";
@@ -46,7 +67,7 @@ export function Sidebar() {
   async function logout() {
     try {
       setSigningOut(true);
-      await fetch("/api/auth/signout", { method: "POST" }); // clears cookie server-side
+      await fetch("/api/auth/signout", { method: "POST" });
     } catch {
       // ignore
     } finally {
@@ -60,25 +81,27 @@ export function Sidebar() {
 
   return (
     <aside className="w-64 bg-sidebar border-r border-border hidden md:flex flex-col">
+      {/* Header */}
       <div className="h-16 flex items-center px-4 border-b border-border">
         <Link href={"/" as Route} className="text-xl font-semibold">
-         Provider Dashboard
+          Provider Dashboard
         </Link>
       </div>
 
+      {/* Navigation */}
       <nav className="p-3 space-y-1 flex-1">
         {nav.map((item) => {
           const Icon = item.icon;
 
-          // Action item (logout)
+          // 🔴 Logout action
           if (item.action === "logout") {
             return (
               <button
                 key="__logout__"
                 onClick={logout}
                 disabled={signingOut}
+                type="button"
                 className="w-full flex items-center gap-3 rounded-lg px-3 py-2 text-sm hover:bg-card disabled:opacity-50"
-                title="Sign out"
               >
                 <Icon size={18} />
                 <span>{signingOut ? "Signing out..." : "Logout"}</span>
@@ -86,13 +109,13 @@ export function Sidebar() {
             );
           }
 
-          // Regular link item
+          // 🔵 Normal nav link
           return (
             <Link
-              key={item.href}
+              key={String(item.href)}
               href={item.href}
-              className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm hover:bg-card ${
-                isActive(item.href) ? "bg-card" : ""
+              className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm hover:bg-card transition ${
+                isActive(item.href) ? "bg-card font-medium" : ""
               }`}
               aria-current={isActive(item.href) ? "page" : undefined}
             >
