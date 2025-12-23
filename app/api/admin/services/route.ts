@@ -1,3 +1,7 @@
+// app/api/admin/services/route.ts
+// ✅ service basePrice ALWAYS 0
+// ✅ variants ALWAYS include: absolutePrice + durationMin + tags
+
 import { NextRequest, NextResponse } from "next/server";
 import { serverFetch } from "@/lib/serverFetch";
 import { cookies as getCookies } from "next/headers";
@@ -16,11 +20,25 @@ export async function GET() {
   );
 }
 
+function toNum(v: any, def = 0) {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : def;
+}
+
+function normTags(v: any): string[] {
+  const tags = Array.isArray(v) ? v : [];
+  const out = tags.map((t) => String(t ?? "").trim()).filter(Boolean);
+  return out.length ? out : ["default"];
+}
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json().catch(() => null);
     if (!body || typeof body !== "object") {
-      return NextResponse.json({ ok: false, message: "Invalid JSON" }, { status: 400 });
+      return NextResponse.json(
+        { ok: false, message: "Invalid JSON" },
+        { status: 400 }
+      );
     }
 
     const store = await getCookies();
@@ -48,24 +66,60 @@ export async function POST(req: NextRequest) {
 
     const p = body as any;
 
-    // ✅ Backend expects camelCase fields (service.service.ts)
+    // ✅ VARIANTS normalize (absolutePrice must be present)
+    const variants = Array.isArray(p.variants)
+      ? p.variants.map((v: any) => {
+          const abs =
+            v?.absolutePrice != null
+              ? toNum(v.absolutePrice, NaN)
+              : v?.unitPrice != null
+              ? toNum(v.unitPrice, NaN)
+              : v?.price != null
+              ? toNum(v.price, NaN)
+              : NaN;
+
+          return {
+            name: String(v?.name ?? "").trim(),
+
+            // ✅ required by backend
+            absolutePrice: toNum(abs, 0),
+
+            // optional fields
+            compareAtPrice:
+              v?.compareAtPrice != null ? toNum(v.compareAtPrice, 0) : undefined,
+
+            // ✅ duration variant based
+            durationMin: v?.durationMin != null ? toNum(v.durationMin, 60) : 60,
+            durationDelta: v?.durationDelta != null ? toNum(v.durationDelta, 0) : 0,
+
+            // ✅ tags required
+            tags: normTags(v?.tags),
+
+            code: v?.code ? String(v.code).trim() : undefined,
+            description: v?.description ? String(v.description).trim() : undefined,
+            image: v?.image ? String(v.image).trim() : undefined,
+            segment: v?.segment ?? undefined,
+            defaultSelected: !!v?.defaultSelected,
+            isPopular: !!v?.isPopular,
+          };
+        })
+      : [];
+
     const backendPayload = {
       // core
       name: p.name,
       slug: p.slug,
       skuCode: p.skuCode,
       categoryId: p.categoryId,
-
       description: p.description ?? "",
 
       bookingType: p.bookingType ?? "HOURLY",
       quantityUnit: p.quantityUnit ?? "hours",
 
-      // pricing/time
-      basePrice: p.basePrice ?? 0,
-      durationMin: p.durationMin ?? 60,
-      teamSize: p.teamSize ?? 1,
+      // ✅ SERVICE PRICE REMOVED
+      basePrice: 0,
 
+      teamSize: p.teamSize ?? 1,
       minQty: p.minQty ?? 1,
       maxQty: p.maxQty ?? null,
 
@@ -77,28 +131,25 @@ export async function POST(req: NextRequest) {
 
       materialsAddonPrice: p.materialsAddonPrice ?? 0,
 
-      // promo/tax
       promoCode: p.promoCode ?? null,
       promoPercent: p.promoPercent ?? 0,
       taxClass: p.taxClass ?? "standard",
 
-      // flags
       isInstantBookable: p.isInstantBookable !== false,
       requiresAddress: p.requiresAddress !== false,
       requiresSlot: p.requiresSlot !== false,
 
-      // arrays
       images: Array.isArray(p.images) ? p.images : [],
       tags: Array.isArray(p.tags) ? p.tags : [],
       cities: Array.isArray(p.cities) ? p.cities : [],
-      variants: Array.isArray(p.variants) ? p.variants : [],
 
-      // ✅ IMPORTANT: global addons ids (your backend uses addonIds)
+      // ✅ normalized variants
+      variants,
+
       addonIds: Array.isArray(p.addonIds) ? p.addonIds : [],
-
-      // optional legacy
       addons: Array.isArray(p.addons) ? p.addons : [],
       priceMatrix: Array.isArray(p.priceMatrix) ? p.priceMatrix : [],
+
       formTemplateId: p.formTemplateId ?? undefined,
       formQuestions: Array.isArray(p.formQuestions) ? p.formQuestions : [],
 

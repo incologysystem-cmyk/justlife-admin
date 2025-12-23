@@ -1,31 +1,19 @@
 // components/forms/ServiceForm.tsx
 "use client";
 
-import { useMemo, useRef, useState, useCallback } from "react";
+import React, { useMemo, useRef, useState, useCallback, useEffect } from "react";
 import { toast } from "sonner";
 import { z } from "zod";
 import type { Category } from "@/types/catalog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import VariantEditor from "./parts/VariantEditor";
+import VariantEditor, { type VariantPayload } from "./parts/VariantEditor";
 import AddonEditor from "./parts/AddonEditor";
 
 /* ----------------- Enums & core schemas ----------------- */
 
 const BookingTypeEnum = z.enum(["HOURLY", "UNIT_BASED"]);
 const QuantityUnitEnum = z.enum(["hours", "items"]);
-const TaxClassEnum = z.enum(["standard", "reduced", "zero"]);
 const StatusEnum = z.enum(["draft", "published"]);
-
-// Variants (frontend simplified — backend has extra optional fields too)
-const VariantSchema = z.object({
-  name: z.string().trim().min(1),
-  priceDelta: z.coerce.number().default(0),
-  durationDelta: z.coerce.number().default(0),
-  code: z.string().trim().optional(),
-  description: z.string().trim().optional(),
-  image: z.string().trim().optional(),
-});
-export type Variant = z.infer<typeof VariantSchema>;
 
 // Booking questions (frontend simplified)
 const QuestionSchema = z.object({
@@ -38,52 +26,20 @@ const QuestionSchema = z.object({
 });
 export type Question = z.infer<typeof QuestionSchema>;
 
-const PolicySchema = z.object({
-  cancellationHours: z.coerce.number().min(0).default(0),
-  rescheduleHours: z.coerce.number().min(0).default(0),
-  sameDayCutoffMin: z.coerce.number().min(0).default(0),
-});
-export type Policy = z.infer<typeof PolicySchema>;
-
 /**
- * ✅ Base schema (includes ALL fields that exist in your Mongoose service schema)
- * NOTE: providerId usually comes from auth/session on backend, so not included.
+ * ✅ Base schema (variant-based pricing)
  */
 const BaseServiceSchema = z.object({
   // Core
   name: z.string().trim().min(2, "Service name is required"),
   slug: z.string().trim().min(2, "Slug is required"),
-  skuCode: z.string().trim().optional(),
   categoryId: z.string().min(1, "Select category"),
-
   description: z.string().trim().optional().default(""),
 
   bookingType: BookingTypeEnum.default("HOURLY"),
   quantityUnit: QuantityUnitEnum.default("hours"),
 
-  // Pricing & time
-  basePrice: z.coerce.number().min(0),
-  durationMin: z.coerce.number().min(0).default(60),
-  teamSize: z.coerce.number().min(1).default(1),
-
-  minQty: z.coerce.number().min(1).default(1),
-  maxQty: z.coerce.number().min(1).optional(),
-
-  leadTimeMin: z.coerce.number().min(0).default(0),
-  bufferAfterMin: z.coerce.number().min(0).default(0),
-
-  minProfessionals: z.coerce.number().min(1).default(1),
-  maxProfessionals: z.coerce.number().min(1).default(4),
-
-  materialsAddonPrice: z.coerce.number().min(0).default(0),
-
-  // Promo & tax
-  promoCode: z.string().trim().nullable().optional().default(null),
-  promoPercent: z.coerce.number().min(0).max(100).default(0),
-  taxClass: TaxClassEnum.default("standard"),
-
   // Flags
-  isInstantBookable: z.coerce.boolean().default(true),
   requiresAddress: z.coerce.boolean().default(true),
   requiresSlot: z.coerce.boolean().default(true),
 
@@ -91,45 +47,37 @@ const BaseServiceSchema = z.object({
   active: z.coerce.boolean().default(true),
   status: StatusEnum.default("draft"),
 
-  // Media & catalog meta
+  // Media & meta
   images: z.array(z.string()).default([]),
-  tags: z.array(z.string()).default([]),
   cities: z.array(z.string()).default([]),
 
-  variants: z.array(VariantSchema).default([]),
+  // ✅ variants required (use editor shape)
+  variants: z
+    .array(
+      z.object({
+        name: z.string().trim().min(1),
+        unitPrice: z.coerce.number().min(0),
+        durationMin: z.coerce.number().min(0).default(60),
+        tags: z.array(z.string().trim().min(1)).min(1),
+        compareAtPrice: z.coerce.number().min(0).optional(),
+        sku: z.string().trim().optional(),
+        description: z.string().trim().optional(),
+        image: z.string().trim().optional(),
+      })
+    )
+    .min(1, "At least 1 variant is required")
+    .default([]),
 
-  /**
-   * ⚠️ IMPORTANT:
-   * Backend schema currently has `addons: [addonSchema]` NOT `addonIds`.
-   * If you want global addons, add `addonIds` field in backend schema OR map on backend.
-   */
   addonIds: z.array(z.string()).default([]),
 
-  // Form / template
-  formTemplateId: z.string().optional(),
+  // Form
   formQuestions: z.array(QuestionSchema).default([]),
-
-  // Policy
-  policy: PolicySchema.default({
-    cancellationHours: 0,
-    rescheduleHours: 0,
-    sameDayCutoffMin: 0,
-  }),
 });
 
 const ServiceSchema = BaseServiceSchema;
 export type ServicePayload = z.infer<typeof ServiceSchema>;
 
-const TAB_ORDER = [
-  "basics",
-  "media",
-  "variants",
-  "addons",
-  "form",
-  "policy",
-  "review",
-  "confirm",
-] as const;
+const TAB_ORDER = ["basics", "media", "variants", "addons", "form", "review", "confirm"] as const;
 type TabKey = (typeof TAB_ORDER)[number];
 
 /* ----------------- Small UI helpers ----------------- */
@@ -172,8 +120,7 @@ function NumberBox(props: {
   defaultValue?: number | string;
   disabled?: boolean;
 }) {
-  const { value, onChange, placeholder, min, max, step, unit, name, defaultValue, disabled } =
-    props;
+  const { value, onChange, placeholder, min, max, step, unit, name, defaultValue, disabled } = props;
   return (
     <div className="relative">
       <input
@@ -206,13 +153,6 @@ function slugify(s: string) {
 
 const toNumOr = (def: number, v: any) => (Number.isFinite(Number(v)) ? Number(v) : def);
 
-function safeParseNumber(fd: FormData, name: string, def: number) {
-  const raw = fd.get(name);
-  if (raw == null || raw === "") return def;
-  const n = Number(raw);
-  return Number.isFinite(n) ? n : def;
-}
-
 function safeParseString(fd: FormData, name: string, def = "") {
   const raw = fd.get(name);
   if (raw == null) return def;
@@ -226,18 +166,55 @@ function parseCsvList(raw: string): string[] {
     .filter(Boolean);
 }
 
+/* ----------------- Categories fetch ----------------- */
+
+function isObjectId(s: string) {
+  return /^[a-fA-F0-9]{24}$/.test(String(s || ""));
+}
+
+async function fetchProviderCategories(): Promise<Category[]> {
+  const res = await fetch("/api/provider/categories?onlyActive=true", {
+    method: "GET",
+    headers: { Accept: "application/json" },
+    cache: "no-store",
+  });
+
+  const json = await res.json().catch(() => ({}));
+
+  if (!res.ok || json?.ok === false) {
+    throw new Error(json?.message || json?.error || `Failed to fetch categories (HTTP ${res.status})`);
+  }
+
+  const list: any[] =
+    (Array.isArray(json?.items) && json.items) ||
+    (Array.isArray(json?.categories) && json.categories) ||
+    (Array.isArray(json?.data) && json.data) ||
+    (Array.isArray(json?.data?.categories) && json.data.categories) ||
+    [];
+
+  const normalized = list
+    .map((c: any) => {
+      const id = String(c?._id ?? c?.id ?? "");
+      const name = String(c?.name ?? "");
+      if (!id || !name) return null;
+      return { ...(c as any), id, _id: id, name, slug: c?.slug } as any;
+    })
+    .filter(Boolean);
+
+  return normalized as Category[];
+}
+
 /* ----------------- Form → payload builder ----------------- */
 
 function buildRawFromForm(
   form: HTMLFormElement | null,
   extras: {
     images: string[];
-    variants: z.infer<typeof VariantSchema>[];
+    variants: VariantPayload[];
     addonIds: string[];
     formQuestions: Question[];
     flags: {
       active: boolean;
-      isInstantBookable: boolean;
       requiresAddress: boolean;
       requiresSlot: boolean;
     };
@@ -246,56 +223,32 @@ function buildRawFromForm(
   }
 ): ServicePayload {
   const fd = form ? new FormData(form) : new FormData();
-
-  const tagsCsv = safeParseString(fd, "tagsCsv", "");
   const citiesCsv = safeParseString(fd, "citiesCsv", "");
 
   const payload: ServicePayload = {
     name: safeParseString(fd, "name", ""),
     slug: safeParseString(fd, "slug", "").trim().toLowerCase(),
-    skuCode: (safeParseString(fd, "skuCode", "") || undefined) as any,
     categoryId: safeParseString(fd, "categoryId", extras.defaultCategoryId || ""),
-
     description: safeParseString(fd, "description", ""),
 
-    bookingType:
-      (safeParseString(fd, "bookingType", "HOURLY") as ServicePayload["bookingType"]) ||
-      "HOURLY",
-    quantityUnit:
-      (safeParseString(fd, "quantityUnit", "hours") as ServicePayload["quantityUnit"]) ||
-      "hours",
+    bookingType: (safeParseString(fd, "bookingType", "HOURLY") as any) || "HOURLY",
+    quantityUnit: (safeParseString(fd, "quantityUnit", "hours") as any) || "hours",
 
-    basePrice: safeParseNumber(fd, "basePrice", 0),
-    durationMin: safeParseNumber(fd, "durationMin", 60),
-    teamSize: safeParseNumber(fd, "teamSize", 1),
-
-    minQty: safeParseNumber(fd, "minQty", 1),
-    maxQty: (fd.get("maxQty") ? safeParseNumber(fd, "maxQty", 1) : undefined) as any,
-
-    leadTimeMin: safeParseNumber(fd, "leadTimeMin", 0),
-    bufferAfterMin: safeParseNumber(fd, "bufferAfterMin", 0),
-
-    minProfessionals: safeParseNumber(fd, "minProfessionals", 1),
-    maxProfessionals: safeParseNumber(fd, "maxProfessionals", 4),
-
-    materialsAddonPrice: safeParseNumber(fd, "materialsAddonPrice", 0),
-
-    promoCode: (safeParseString(fd, "promoCode", "").trim() || null) as any,
-    promoPercent: safeParseNumber(fd, "promoPercent", 0),
-    taxClass: (safeParseString(fd, "taxClass", "standard") as any) || "standard",
-
-    isInstantBookable: extras.flags.isInstantBookable,
     requiresAddress: extras.flags.requiresAddress,
     requiresSlot: extras.flags.requiresSlot,
 
     images: extras.images || [],
-    tags: parseCsvList(tagsCsv),
     cities: parseCsvList(citiesCsv),
 
     variants: (extras.variants || []).map((v) => ({
-      ...v,
-      priceDelta: toNumOr(0, (v as any).priceDelta),
-      durationDelta: toNumOr(0, (v as any).durationDelta),
+      name: String(v.name ?? "").trim(),
+      unitPrice: toNumOr(0, v.unitPrice),
+      durationMin: toNumOr(60, v.durationMin),
+      tags: Array.isArray(v.tags) ? v.tags.map((t) => String(t).trim()).filter(Boolean) : [],
+      compareAtPrice: v.compareAtPrice != null ? toNumOr(0, v.compareAtPrice) : undefined,
+      sku: v.sku ? String(v.sku).trim() : undefined,
+      description: v.description ? String(v.description).trim() : undefined,
+      image: v.image ? String(v.image).trim() : undefined,
     })),
 
     addonIds: extras.addonIds || [],
@@ -303,14 +256,7 @@ function buildRawFromForm(
     active: extras.flags.active,
     status: extras.status,
 
-    formTemplateId: (safeParseString(fd, "formTemplateId", "").trim() || undefined) as any,
     formQuestions: extras.formQuestions || [],
-
-    policy: {
-      cancellationHours: safeParseNumber(fd, "policyCancellationHours", 0),
-      rescheduleHours: safeParseNumber(fd, "policyRescheduleHours", 0),
-      sameDayCutoffMin: safeParseNumber(fd, "policySameDayCutoffMin", 0),
-    },
   };
 
   if (!payload.slug && payload.name) payload.slug = slugify(payload.name);
@@ -319,88 +265,31 @@ function buildRawFromForm(
 
 function computeIssues(p: ServicePayload): string[] {
   const issues: string[] = [];
+
   if (!p.name || p.name.trim().length < 2) issues.push("Service name: minimum 2 characters.");
   if (!p.slug || p.slug.trim().length < 2)
     issues.push("Slug: minimum 2 characters (auto-generates from name if left blank).");
   if (!p.categoryId) issues.push("Category: please select a category.");
 
-  if (!Number.isFinite(p.basePrice) || p.basePrice < 0)
-    issues.push("Base price: must be a non-negative number.");
-  if (!Number.isFinite(p.durationMin) || p.durationMin < 0)
-    issues.push("Duration: must be a non-negative number.");
-  if (!Number.isFinite(p.teamSize) || p.teamSize < 1)
-    issues.push("Team size: must be at least 1.");
-  if (!Number.isFinite(p.minQty) || p.minQty < 1) issues.push("Min qty: must be at least 1.");
-  if (p.maxQty != null && (!Number.isFinite(p.maxQty) || p.maxQty < p.minQty))
-    issues.push("Max qty: if set, must be >= min qty.");
+  if (!p.variants || p.variants.length === 0) {
+    issues.push("Variants: at least 1 variant is required.");
+  } else {
+    p.variants.forEach((v, i) => {
+      if (!v.name || !v.name.trim()) issues.push(`Variant #${i + 1}: name is required.`);
 
-  if (!Number.isFinite(p.leadTimeMin) || p.leadTimeMin < 0)
-    issues.push("Lead time: must be a non-negative number.");
-  if (!Number.isFinite(p.bufferAfterMin) || p.bufferAfterMin < 0)
-    issues.push("Buffer after: must be a non-negative number.");
+      const d = (v as any).durationMin;
+      if (!Number.isFinite(d) || d < 0) issues.push(`Variant "${v.name || `#${i + 1}`}": duration must be >= 0.`);
 
-  if (!Number.isFinite(p.minProfessionals) || p.minProfessionals < 1)
-    issues.push("Min professionals: must be at least 1.");
-  if (!Number.isFinite(p.maxProfessionals) || p.maxProfessionals < p.minProfessionals)
-    issues.push("Max professionals: must be >= min professionals.");
+      const price = (v as any).unitPrice;
+      if (!Number.isFinite(price) || price < 0)
+        issues.push(`Variant "${v.name || `#${i + 1}`}": price must be >= 0.`);
 
-  if (!Number.isFinite(p.materialsAddonPrice) || p.materialsAddonPrice < 0)
-    issues.push("Materials price: must be a non-negative number.");
-
-  if (!Number.isFinite(p.promoPercent) || p.promoPercent < 0 || p.promoPercent > 100)
-    issues.push("Promo percent: must be between 0 and 100.");
-
-  // Policy checks
-  if (p.policy) {
-    if (!Number.isFinite(p.policy.cancellationHours) || p.policy.cancellationHours < 0)
-      issues.push("Policy cancellation hours: must be >= 0.");
-    if (!Number.isFinite(p.policy.rescheduleHours) || p.policy.rescheduleHours < 0)
-      issues.push("Policy reschedule hours: must be >= 0.");
-    if (!Number.isFinite(p.policy.sameDayCutoffMin) || p.policy.sameDayCutoffMin < 0)
-      issues.push("Policy same-day cutoff: must be >= 0.");
+      if (!Array.isArray((v as any).tags) || (v as any).tags.length === 0)
+        issues.push(`Variant "${v.name || `#${i + 1}`}": at least 1 tag is required.`);
+    });
   }
 
   return issues;
-}
-
-/* ---------- VariantEditor adapter (delta ↔ unitPrice + image + description) ---------- */
-
-type VariantDelta = z.infer<typeof VariantSchema>;
-type VariantUnit = {
-  name: string;
-  unitPrice: number;
-  sku?: string;
-  description?: string;
-  image?: string;
-};
-
-function toUnit(list: VariantDelta[]): VariantUnit[] {
-  return (list || []).map((v) => ({
-    name: v.name,
-    unitPrice: Number.isFinite(v.priceDelta) ? Number(v.priceDelta) : 0,
-    sku: v.code,
-    description: v.description,
-    image: v.image,
-  }));
-}
-function toDelta(list: VariantUnit[]): VariantDelta[] {
-  return (list || []).map((v) => ({
-    name: v.name ?? "",
-    priceDelta: Number.isFinite(v.unitPrice) ? Number(v.unitPrice) : 0,
-    durationDelta: 0,
-    code: v.sku || undefined,
-    description: v.description || undefined,
-    image: v.image || undefined,
-  }));
-}
-function VariantEditorCompat({
-  value,
-  onChange,
-}: {
-  value: VariantDelta[];
-  onChange: (v: VariantDelta[]) => void;
-}) {
-  return <VariantEditor value={toUnit(value)} onChange={(u: VariantUnit[]) => onChange(toDelta(u))} />;
 }
 
 /* ----------------- Main ServiceForm ----------------- */
@@ -419,14 +308,47 @@ export default function ServiceForm({
   const formRef = useRef<HTMLFormElement>(null);
   const [loading, setLoading] = useState(false);
 
+  const [cats, setCats] = useState<Category[]>(Array.isArray(categories) ? categories : []);
+  const [catsLoading, setCatsLoading] = useState(false);
+  const [catsError, setCatsError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (Array.isArray(categories) && categories.length) setCats(categories);
+  }, [categories]);
+
+  useEffect(() => {
+    let mounted = true;
+
+    const load = async () => {
+      setCatsError(null);
+      setCatsLoading(true);
+      try {
+        const list = await fetchProviderCategories();
+        if (!mounted) return;
+        setCats(list);
+      } catch (e: any) {
+        if (!mounted) return;
+        setCats([]);
+        setCatsError(e?.message || "Failed to load categories");
+      } finally {
+        if (!mounted) return;
+        setCatsLoading(false);
+      }
+    };
+
+    load();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
   const [status, setStatus] = useState<ServicePayload["status"]>("draft");
   const [images, setImages] = useState<string[]>([]);
-  const [variants, _setVariants] = useState<z.infer<typeof VariantSchema>[]>([]);
+  const [variants, setVariants] = useState<VariantPayload[]>([]);
   const [addonIds, setAddonIds] = useState<string[]>([]);
   const [formQuestions, setFormQuestions] = useState<Question[]>([]);
 
   const [active, setActive] = useState(true);
-  const [isInstantBookable, setIsInstantBookable] = useState(true);
   const [requiresAddress, setRequiresAddress] = useState(true);
   const [requiresSlot, setRequiresSlot] = useState(true);
 
@@ -443,13 +365,6 @@ export default function ServiceForm({
 
   const [, setTick] = useState(0);
   const bump = useCallback(() => setTick((n) => n + 1), []);
-  const setVariants = useCallback(
-    (v: z.infer<typeof VariantSchema>[]) => {
-      _setVariants(Array.isArray(v) ? v.map((x) => ({ ...x })) : []);
-      bump();
-    },
-    [bump]
-  );
 
   const snapshot = useMemo(() => {
     return buildRawFromForm(formRef.current, {
@@ -457,22 +372,11 @@ export default function ServiceForm({
       variants,
       addonIds,
       formQuestions,
-      flags: { active, isInstantBookable, requiresAddress, requiresSlot },
+      flags: { active, requiresAddress, requiresSlot },
       status,
       defaultCategoryId,
     });
-  }, [
-    images,
-    variants,
-    addonIds,
-    formQuestions,
-    active,
-    isInstantBookable,
-    requiresAddress,
-    requiresSlot,
-    status,
-    defaultCategoryId,
-  ]);
+  }, [images, variants, addonIds, formQuestions, active, requiresAddress, requiresSlot, status, defaultCategoryId]);
 
   const issues = useMemo(() => computeIssues(snapshot), [snapshot]);
 
@@ -488,14 +392,13 @@ export default function ServiceForm({
       variants,
       addonIds,
       formQuestions,
-      flags: { active, isInstantBookable, requiresAddress, requiresSlot },
+      flags: { active, requiresAddress, requiresSlot },
       status: desiredStatus,
       defaultCategoryId,
     });
 
     const parsed = ServiceSchema.safeParse(raw);
     if (!parsed.success) {
-      console.error(parsed.error);
       toast.error(parsed.error.issues[0]?.message || "Please fix validation errors");
       setTab("review");
       return;
@@ -503,6 +406,10 @@ export default function ServiceForm({
 
     try {
       setLoading(true);
+
+      // ✅ helpful debug
+      // console.log("SUBMIT variants:", parsed.data.variants);
+
       await onSubmit(parsed.data);
       toast.success(desiredStatus === "published" ? "Service published" : "Service saved");
 
@@ -512,7 +419,6 @@ export default function ServiceForm({
       setAddonIds([]);
       setFormQuestions([]);
       setActive(true);
-      setIsInstantBookable(true);
       setRequiresAddress(true);
       setRequiresSlot(true);
       setStatus("draft");
@@ -525,6 +431,7 @@ export default function ServiceForm({
   }
 
   const show = (key: TabKey) => ({ display: tab === key ? "block" : "none" } as const);
+  const canSelectCategory = cats.length > 0 && !catsLoading;
 
   return (
     <div className="flex justify-center">
@@ -540,11 +447,7 @@ export default function ServiceForm({
           <div className="text-base font-semibold">Service Editor (Justlife)</div>
           <div className="flex gap-2">
             {onCancel && (
-              <button
-                type="button"
-                onClick={onCancel}
-                className="px-3 py-2 rounded border border-border text-sm"
-              >
+              <button type="button" onClick={onCancel} className="px-3 py-2 rounded border border-border text-sm">
                 Cancel
               </button>
             )}
@@ -581,30 +484,31 @@ export default function ServiceForm({
         )}
 
         <Tabs value={tab} onValueChange={(v) => setTab(v as TabKey)} className="w-full">
-          <TabsList className="grid grid-cols-4 md:grid-cols-8 w-full sticky top-[52px] bg-card z-10">
+          <TabsList className="grid grid-cols-4 md:grid-cols-7 w-full sticky top-[52px] bg-card z-10">
             <TabsTrigger value="basics">Basics</TabsTrigger>
             <TabsTrigger value="media">Media</TabsTrigger>
             <TabsTrigger value="variants">Variants</TabsTrigger>
             <TabsTrigger value="addons">Add-ons</TabsTrigger>
             <TabsTrigger value="form">Form</TabsTrigger>
-            <TabsTrigger value="policy">Policy</TabsTrigger>
             <TabsTrigger value="review">Review</TabsTrigger>
             <TabsTrigger value="confirm">Confirmation</TabsTrigger>
           </TabsList>
 
           {/* ---------- BASICS ---------- */}
           <TabsContent value="basics" forceMount style={show("basics")} className="space-y-4 pt-4">
+            {catsError && (
+              <div className="rounded border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
+                {catsError}
+              </div>
+            )}
+
             <div className="grid md:grid-cols-2 gap-4">
               <Field label="Service name (shown to users)" helper="Add your service name customers will recognize.">
                 <input name="name" required className="w-full rounded border border-border bg-background px-3 py-2 text-sm" />
               </Field>
 
               <Field label="Slug (used in URLs)" helper="Leave blank to auto-generate from name.">
-                <input
-                  name="slug"
-                  placeholder="(auto)"
-                  className="w-full rounded border border-border bg-background px-3 py-2 text-sm"
-                />
+                <input name="slug" placeholder="(auto)" className="w-full rounded border border-border bg-background px-3 py-2 text-sm" />
               </Field>
 
               <Field label="Description" helper="Short description shown on service page/cards (optional).">
@@ -617,150 +521,52 @@ export default function ServiceForm({
               </Field>
 
               <div className="space-y-4">
-                <Field label="SKU Code (optional)" helper="Internal only; leave blank if unsure.">
-                  <input
-                    name="skuCode"
-                    placeholder="SOFA-DC-001"
-                    className="w-full rounded border border-border bg-background px-3 py-2 text-sm"
-                  />
-                </Field>
-
                 <Field label="Category" helper="Select the most relevant category.">
-                  <select
-                    name="categoryId"
-                    defaultValue={defaultCategoryId ?? ""}
-                    className="w-full rounded border border-border bg-background px-3 py-2 text-sm"
-                  >
-                    <option value="" disabled>
-                      Select category
-                    </option>
-                    {categories.map((c, idx) => (
-                      <option
-                        key={`${(c as any)._id ?? (c as any).id ?? (c as any).slug}-${idx}`}
-                        value={(c as any)._id}
-                      >
-                        {c.name}
+                  {catsLoading ? (
+                    <div className="mt-1 rounded border px-3 py-2 text-xs text-slate-600 bg-slate-50">Loading categories...</div>
+                  ) : !canSelectCategory ? (
+                    <div className="mt-1 rounded border px-3 py-2 text-xs text-slate-600 bg-slate-50">
+                      No categories available. Please create a category first.
+                    </div>
+                  ) : (
+                    <select
+                      name="categoryId"
+                      defaultValue={defaultCategoryId && isObjectId(defaultCategoryId) ? defaultCategoryId : ""}
+                      className="w-full rounded border border-border bg-background px-3 py-2 text-sm"
+                      required
+                    >
+                      <option value="" disabled>
+                        Select category
                       </option>
-                    ))}
-                  </select>
+                      {cats.map((c: any, idx) => {
+                        const id = String(c?._id ?? c?.id ?? "");
+                        return (
+                          <option key={`${id}-${idx}`} value={id}>
+                            {c?.name ?? "Untitled"}
+                          </option>
+                        );
+                      })}
+                    </select>
+                  )}
                 </Field>
               </div>
 
               <Field label="Booking type" helper="Hourly (Home Cleaning) or unit-based (Sofa/Mattress etc.).">
-                <select
-                  name="bookingType"
-                  defaultValue="HOURLY"
-                  className="w-full rounded border border-border bg-background px-3 py-2 text-sm"
-                >
+                <select name="bookingType" defaultValue="HOURLY" className="w-full rounded border border-border bg-background px-3 py-2 text-sm">
                   <option value="HOURLY">Hourly (e.g., Home Cleaning)</option>
                   <option value="UNIT_BASED">Unit-based (e.g., Sofa/Mattress)</option>
                 </select>
               </Field>
 
               <Field label="Quantity unit label" helper="What does quantity represent? (shown to users).">
-                <select
-                  name="quantityUnit"
-                  defaultValue="hours"
-                  className="w-full rounded border border-border bg-background px-3 py-2 text-sm"
-                >
+                <select name="quantityUnit" defaultValue="hours" className="w-full rounded border border-border bg-background px-3 py-2 text-sm">
                   <option value="hours">Hours</option>
                   <option value="items">Items</option>
                 </select>
               </Field>
 
-              <Field label="Base price" helper="For hourly services, this is per hour (per professional).">
-                <NumberBox name="basePrice" min={0} step={0.01} placeholder="e.g., 35.00" unit="AED" />
-              </Field>
-
-              <div className="grid grid-cols-2 gap-3">
-                <Field label="Duration" helper="Typical job duration in minutes.">
-                  <NumberBox name="durationMin" min={0} defaultValue={60} unit="min" />
-                </Field>
-                <Field label="Team size" helper="Number of staff typically assigned.">
-                  <NumberBox name="teamSize" min={1} defaultValue={1} unit="people" />
-                </Field>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <Field label="Min quantity" helper="Minimum hours/units a customer must book.">
-                  <NumberBox name="minQty" min={1} defaultValue={1} unit="qty" />
-                </Field>
-                <Field label="Max quantity (optional)" helper="Maximum hours/units per booking; optional.">
-                  <NumberBox name="maxQty" min={1} unit="qty" />
-                </Field>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <Field label="Lead time" helper="Minimum minutes before a booking can start.">
-                  <NumberBox name="leadTimeMin" min={0} defaultValue={0} unit="min" />
-                </Field>
-                <Field label="Buffer after" helper="Buffer time after service ends (minutes).">
-                  <NumberBox name="bufferAfterMin" min={0} defaultValue={0} unit="min" />
-                </Field>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <Field label="Min professionals" helper="Minimum number of professionals allowed.">
-                  <NumberBox name="minProfessionals" min={1} defaultValue={1} unit="pros" />
-                </Field>
-                <Field label="Max professionals" helper="Maximum number of professionals allowed.">
-                  <NumberBox name="maxProfessionals" min={1} defaultValue={4} unit="pros" />
-                </Field>
-              </div>
-
-              <Field
-                label="Materials addon price"
-                helper='If customer selects "Yes, bring materials", how much extra to charge per booking.'
-              >
-                <NumberBox name="materialsAddonPrice" min={0} step={0.01} defaultValue={0} unit="AED" />
-              </Field>
-
-              <Field label="Promo code (optional)" helper="If active, customers can apply this code at checkout.">
-                <input
-                  name="promoCode"
-                  placeholder="WINTER25"
-                  className="w-full rounded border border-border bg-background px-3 py-2 text-sm"
-                />
-              </Field>
-
-              <Field label="Promo percent" helper="Discount percent applied on basePrice (0–100).">
-                <NumberBox name="promoPercent" min={0} max={100} step={1} defaultValue={0} unit="%" />
-              </Field>
-
-              <Field label="Tax class" helper="Controls tax calculation category.">
-                <select
-                  name="taxClass"
-                  defaultValue="standard"
-                  className="w-full rounded border border-border bg-background px-3 py-2 text-sm"
-                >
-                  <option value="standard">Standard</option>
-                  <option value="reduced">Reduced</option>
-                  <option value="zero">Zero</option>
-                </select>
-              </Field>
-
-              <Field label="Tags" helper="Comma separated (e.g., deep-clean, premium, eco-friendly).">
-                <input
-                  name="tagsCsv"
-                  placeholder="deep-clean, premium"
-                  className="w-full rounded border border-border bg-background px-3 py-2 text-sm"
-                />
-              </Field>
-
               <Field label="Cities" helper="Comma separated (e.g., Dubai, Abu Dhabi).">
-                <input
-                  name="citiesCsv"
-                  placeholder="Dubai, Abu Dhabi"
-                  className="w-full rounded border border-border bg-background px-3 py-2 text-sm"
-                />
-              </Field>
-
-              <Field label="Form template ID (optional)" helper="If you have a saved template, paste its ID here.">
-                <input
-                  name="formTemplateId"
-                  placeholder="FormTemplate ObjectId"
-                  className="w-full rounded border border-border bg-background px-3 py-2 text-sm"
-                />
+                <input name="citiesCsv" placeholder="Dubai, Abu Dhabi" className="w-full rounded border border-border bg-background px-3 py-2 text-sm" />
               </Field>
             </div>
 
@@ -775,23 +581,7 @@ export default function ServiceForm({
                 </label>
 
                 <label className="flex items-start gap-2 text-xs">
-                  <input
-                    type="checkbox"
-                    checked={isInstantBookable}
-                    onChange={(e) => setIsInstantBookable(e.target.checked)}
-                  />
-                  <span className="text-gray-900">
-                    Instant bookable
-                    <p className="text-[11px] text-gray-900 mt-1">Allow customers to book instantly (no manual approval).</p>
-                  </span>
-                </label>
-
-                <label className="flex items-start gap-2 text-xs">
-                  <input
-                    type="checkbox"
-                    checked={requiresAddress}
-                    onChange={(e) => setRequiresAddress(e.target.checked)}
-                  />
+                  <input type="checkbox" checked={requiresAddress} onChange={(e) => setRequiresAddress(e.target.checked)} />
                   <span className="text-gray-900">
                     Requires address
                     <p className="text-[11px] text-gray-900 mt-1">Customer must provide address for this service.</p>
@@ -826,57 +616,27 @@ export default function ServiceForm({
           {/* ---------- VARIANTS ---------- */}
           <TabsContent value="variants" forceMount style={show("variants")} className="space-y-4 pt-4">
             <p className="text-[11px] text-gray-900">
-              For unit-based services (e.g., sofa sizes), create options with their own prices. For hourly services,
-              you can leave this empty or use it for special levels (basic/deep clean).
+              Price + duration + tags are <b>per-variant</b>. Tags are <b>required</b>.
             </p>
-            <VariantEditorCompat value={variants} onChange={setVariants} />
+
+            {/* ✅ NO MORE compat adapters */}
+            <VariantEditor value={variants} onChange={setVariants} />
+
             <div className="text-[11px] text-gray-900">
               Live variants count: <b>{variants.length}</b>
             </div>
             <NavBar goPrev={goPrev} goNext={goNext} />
           </TabsContent>
 
-          {/* ---------- ADD-ONS (global addonIds) ---------- */}
+          {/* ---------- ADD-ONS ---------- */}
           <TabsContent value="addons" forceMount style={show("addons")} className="space-y-4 pt-4">
-            <p className="text-[11px] text-gray-900">
-              Select which global add-ons will be available for this service.
-              <br />
-              <b>Note:</b> backend must support <code>addonIds</code> OR map them to <code>addons</code>.
-            </p>
             <AddonEditor value={addonIds} onChange={setAddonIds} />
             <NavBar goPrev={goPrev} goNext={goNext} />
           </TabsContent>
 
           {/* ---------- FORM QUESTIONS ---------- */}
           <TabsContent value="form" forceMount style={show("form")} className="space-y-4 pt-4">
-            <p className="text-[11px] text-gray-900">
-              Add booking questions to collect details from customers, like hours, professionals, materials, and
-              instructions.
-            </p>
             <QuestionEditor value={formQuestions} onChange={(v) => setFormQuestions(v)} />
-            <NavBar goPrev={goPrev} goNext={goNext} />
-          </TabsContent>
-
-          {/* ---------- POLICY ---------- */}
-          <TabsContent value="policy" forceMount style={show("policy")} className="space-y-4 pt-4">
-            <p className="text-[11px] text-gray-900">
-              Configure cancellation/reschedule rules and same-day cutoff.
-            </p>
-
-            <div className="grid md:grid-cols-3 gap-4">
-              <Field label="Cancellation hours" helper="How many hours before start can user cancel.">
-                <NumberBox name="policyCancellationHours" min={0} step={1} defaultValue={0} unit="hrs" />
-              </Field>
-
-              <Field label="Reschedule hours" helper="How many hours before start can user reschedule.">
-                <NumberBox name="policyRescheduleHours" min={0} step={1} defaultValue={0} unit="hrs" />
-              </Field>
-
-              <Field label="Same-day cutoff" helper="Cutoff minutes for same-day booking/reschedule.">
-                <NumberBox name="policySameDayCutoffMin" min={0} step={5} defaultValue={0} unit="min" />
-              </Field>
-            </div>
-
             <NavBar goPrev={goPrev} goNext={goNext} />
           </TabsContent>
 
@@ -887,11 +647,7 @@ export default function ServiceForm({
               <button type="button" onClick={goPrev} className="px-3 py-2 rounded border border-border text-sm">
                 ← Back
               </button>
-              <button
-                type="button"
-                onClick={() => setTab("confirm")}
-                className="px-3 py-2 rounded bg-white/10 border border-border text-sm"
-              >
+              <button type="button" onClick={() => setTab("confirm")} className="px-3 py-2 rounded bg-white/10 border border-border text-sm">
                 Continue to Confirmation →
               </button>
             </div>
@@ -899,12 +655,7 @@ export default function ServiceForm({
 
           {/* ---------- CONFIRM ---------- */}
           <TabsContent value="confirm" forceMount style={show("confirm")} className="space-y-4 pt-4">
-            <ConfirmationStep
-              snapshot={snapshot}
-              issues={issues}
-              loading={loading}
-              onBack={() => setTab("review")}
-            />
+            <ConfirmationStep snapshot={snapshot} issues={issues} loading={loading} onBack={() => setTab("review")} />
           </TabsContent>
         </Tabs>
       </form>
@@ -914,23 +665,10 @@ export default function ServiceForm({
 
 /* ----------------- Extra components ----------------- */
 
-function NavBar({
-  goPrev,
-  goNext,
-  isFirst = false,
-}: {
-  goPrev: () => void;
-  goNext: () => void;
-  isFirst?: boolean;
-}) {
+function NavBar({ goPrev, goNext, isFirst = false }: { goPrev: () => void; goNext: () => void; isFirst?: boolean }) {
   return (
     <div className="flex items-center justify-between pt-2">
-      <button
-        type="button"
-        onClick={goPrev}
-        className="px-3 py-2 rounded border border-border text-sm disabled:opacity-50"
-        disabled={isFirst}
-      >
+      <button type="button" onClick={goPrev} className="px-3 py-2 rounded border border-border text-sm disabled:opacity-50" disabled={isFirst}>
         ← Back
       </button>
       <button type="button" onClick={goNext} className="px-3 py-2 rounded bg-white/10 border border-border text-sm">
@@ -940,13 +678,7 @@ function NavBar({
   );
 }
 
-function ImagePicker({
-  images,
-  setImages,
-}: {
-  images: string[];
-  setImages: (v: string[]) => void;
-}) {
+function ImagePicker({ images, setImages }: { images: string[]; setImages: (v: string[]) => void }) {
   async function onFiles(files?: FileList | null) {
     if (!files || files.length === 0) return;
     const arr: string[] = [];
@@ -957,7 +689,7 @@ function ImagePicker({
         continue;
       }
       const buf = await f.arrayBuffer();
-      // @ts-ignore – Buffer from bundler/polyfill
+      // @ts-ignore
       arr.push(`data:${f.type};base64,${Buffer.from(buf).toString("base64")}`);
     }
     if (arr.length) setImages([...images, ...arr]);
@@ -973,11 +705,7 @@ function ImagePicker({
           {images.map((src, i) => (
             <div key={`${i}-${src.slice(0, 12)}`} className="relative border border-border rounded overflow-hidden">
               <img src={src} alt={`img-${i}`} className="w-full h-28 object-cover" />
-              <button
-                type="button"
-                onClick={() => remove(i)}
-                className="absolute right-2 top-2 text-xs px-2 py-0.5 rounded bg-black/60"
-              >
+              <button type="button" onClick={() => remove(i)} className="absolute right-2 top-2 text-xs px-2 py-0.5 rounded bg-black/60">
                 Remove
               </button>
             </div>
@@ -988,16 +716,9 @@ function ImagePicker({
   );
 }
 
-function QuestionEditor({
-  value,
-  onChange,
-}: {
-  value: Question[];
-  onChange: (v: Question[]) => void;
-}) {
+function QuestionEditor({ value, onChange }: { value: Question[]; onChange: (v: Question[]) => void }) {
   function addQuestion() {
-    const id =
-      (globalThis as any)?.crypto?.randomUUID?.() ?? `q_${Math.random().toString(36).slice(2, 10)}`;
+    const id = (globalThis as any)?.crypto?.randomUUID?.() ?? `q_${Math.random().toString(36).slice(2, 10)}`;
     onChange([...value, { id, label: "", key: "", type: "text", required: false, options: [] }]);
   }
   function update(i: number, patch: Partial<Question>) {
@@ -1096,24 +817,7 @@ function QuestionEditor({
   );
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div className="border border-border rounded-lg p-3">
-      <div className="text-xs font-semibold mb-2">{title}</div>
-      <div className="text-xs">{children}</div>
-    </div>
-  );
-}
-
-function ReviewStep({
-  snapshot,
-  issues,
-  onBack,
-}: {
-  snapshot: ServicePayload;
-  issues: string[];
-  onBack: () => void;
-}) {
+function ReviewStep({ snapshot, issues, onBack }: { snapshot: ServicePayload; issues: string[]; onBack: () => void }) {
   return (
     <div className="space-y-3">
       <div className="text-sm font-semibold">Review</div>
@@ -1134,64 +838,34 @@ function ReviewStep({
         )}
       </div>
 
-      <Section title="Basics">
+      <div className="border border-border rounded-lg p-3 text-xs space-y-1">
         <div>Name: {snapshot.name || "—"}</div>
         <div>Slug: {snapshot.slug || "—"}</div>
-        <div>SKU: {snapshot.skuCode || "—"}</div>
         <div>Category: {snapshot.categoryId || "—"}</div>
         <div>Description: {snapshot.description || "—"}</div>
         <div>Booking type: {snapshot.bookingType}</div>
         <div>Quantity unit: {snapshot.quantityUnit}</div>
         <div>Active: {snapshot.active ? "Yes" : "No"}</div>
         <div>Status: {snapshot.status}</div>
-      </Section>
-
-      <Section title="Pricing, Time & Rules">
-        <div>Base price (AED): {snapshot.basePrice ?? "—"}</div>
-        <div>Promo: {snapshot.promoCode ? `${snapshot.promoCode} (${snapshot.promoPercent}%)` : `${snapshot.promoPercent}%`}</div>
-        <div>Tax class: {snapshot.taxClass}</div>
-        <div>Duration (min): {snapshot.durationMin ?? "—"}</div>
-        <div>Lead time (min): {snapshot.leadTimeMin ?? "—"}</div>
-        <div>Buffer after (min): {snapshot.bufferAfterMin ?? "—"}</div>
-        <div>Team size: {snapshot.teamSize ?? "—"}</div>
-        <div>
-          Min qty ({snapshot.quantityUnit}): {snapshot.minQty ?? "—"}
-        </div>
-        <div>
-          Max qty ({snapshot.quantityUnit}): {snapshot.maxQty ?? "—"}
-        </div>
-        <div>
-          Professionals: {snapshot.minProfessionals} – {snapshot.maxProfessionals}
-        </div>
-        <div>Materials addon (AED): {snapshot.materialsAddonPrice ?? "—"}</div>
-        <div>Instant bookable: {snapshot.isInstantBookable ? "Yes" : "No"}</div>
-        <div>Requires address: {snapshot.requiresAddress ? "Yes" : "No"}</div>
-        <div>Requires slot: {snapshot.requiresSlot ? "Yes" : "No"}</div>
-      </Section>
-
-      <Section title="Catalog meta">
-        <div>Tags: {snapshot.tags?.length ? snapshot.tags.join(", ") : "—"}</div>
         <div>Cities: {snapshot.cities?.length ? snapshot.cities.join(", ") : "—"}</div>
-      </Section>
 
-      <Section title="Media / Variants / Add-ons">
-        <div>Images: {snapshot.images?.length || 0}</div>
-        <div>
-          Variants:
+        <div className="pt-2">
+          <div className="font-semibold">Variants</div>
           {snapshot.variants?.length ? (
             <ul className="list-disc pl-5">
               {snapshot.variants.map((v, i) => (
                 <li key={`var-${i}`}>
-                  {v.name} — {v.priceDelta} AED{v.code ? ` (${v.code})` : ""}{v.description ? ` — ${v.description}` : ""}{v.image ? " [image]" : ""}
+                  {v.name} — {v.unitPrice} AED — {v.durationMin} min — tags: {v.tags.join(", ")}
                 </li>
               ))}
             </ul>
           ) : (
-            " — none"
+            "— none"
           )}
         </div>
-        <div>
-          Add-ons:
+
+        <div className="pt-2">
+          <div className="font-semibold">Add-ons</div>
           {snapshot.addonIds?.length ? (
             <ul className="list-disc pl-5">
               {snapshot.addonIds.map((id, i) => (
@@ -1199,31 +873,10 @@ function ReviewStep({
               ))}
             </ul>
           ) : (
-            " — none"
+            "— none"
           )}
         </div>
-      </Section>
-
-      <Section title="Form Template & Questions">
-        <div>Form template ID: {snapshot.formTemplateId || "—"}</div>
-        {snapshot.formQuestions?.length ? (
-          <ul className="list-disc pl-5">
-            {snapshot.formQuestions.map((q, i) => (
-              <li key={`q-${q.id}`}>
-                #{i + 1} {q.label || "—"} | key: {q.key || "—"} | type: {q.type} | required: {q.required ? "Yes" : "No"}
-              </li>
-            ))}
-          </ul>
-        ) : (
-          "— No questions"
-        )}
-      </Section>
-
-      <Section title="Policy">
-        <div>Cancellation hours: {snapshot.policy?.cancellationHours ?? 0}</div>
-        <div>Reschedule hours: {snapshot.policy?.rescheduleHours ?? 0}</div>
-        <div>Same-day cutoff (min): {snapshot.policy?.sameDayCutoffMin ?? 0}</div>
-      </Section>
+      </div>
 
       <div className="flex items-center justify-between pt-2">
         <button type="button" onClick={onBack} className="px-3 py-2 rounded border border-border text-sm">
@@ -1251,9 +904,6 @@ function ConfirmationStep({
   return (
     <div className="space-y-3">
       <div className="text-sm font-semibold">Confirmation</div>
-      <p className="text-xs text-gray-900">
-        Confirm the details below and publish. If issues are listed, go back and fix them.
-      </p>
 
       {issues.length > 0 ? (
         <div className="rounded border border-yellow-600/40 bg-yellow-900/20 p-3 text-xs">
@@ -1278,18 +928,13 @@ function ConfirmationStep({
           <span className="font-medium">Category:</span> {snapshot.categoryId || "—"}
         </div>
         <div>
-          <span className="font-medium">Base price:</span> {snapshot.basePrice ?? "—"} AED
-        </div>
-        <div>
           <span className="font-medium">Booking type:</span> {snapshot.bookingType}
         </div>
         <div>
-          <span className="font-medium">Instant bookable:</span> {snapshot.isInstantBookable ? "Yes" : "No"}
+          <span className="font-medium">Requires address:</span> {snapshot.requiresAddress ? "Yes" : "No"}
         </div>
         <div>
-          <span className="font-medium">Policy:</span>{" "}
-          cancel {snapshot.policy?.cancellationHours ?? 0}h, reschedule {snapshot.policy?.rescheduleHours ?? 0}h, cutoff{" "}
-          {snapshot.policy?.sameDayCutoffMin ?? 0}m
+          <span className="font-medium">Requires time slot:</span> {snapshot.requiresSlot ? "Yes" : "No"}
         </div>
       </div>
 

@@ -1,7 +1,4 @@
 // lib/api.ts
-// Central mock API for the Justlife-style admin. Safe to use in both
-// server components and client components.
-
 import type {
   ServiceDetail,
   ServiceVariant,
@@ -324,9 +321,49 @@ export async function createCategory(
 // ----------------------
 // Services
 // ----------------------
+
+
 export async function createService(
   payload: CreateServicePayload
 ): Promise<ServiceDetail> {
+  const safePayload: CreateServicePayload = {
+    ...payload,
+
+    // ✅ service price removed
+    basePrice: 0,
+
+    // ✅ variants must be strict
+    variants: Array.isArray(payload.variants)
+      ? payload.variants.map((v: any) => ({
+          ...v,
+          name: String(v?.name ?? "").trim(),
+
+          // ✅ absolutePrice required
+          absolutePrice: Number.isFinite(Number(v?.absolutePrice))
+            ? Number(v.absolutePrice)
+            : Number.isFinite(Number(v?.unitPrice))
+            ? Number(v.unitPrice)
+            : Number.isFinite(Number(v?.price))
+            ? Number(v.price)
+            : 0,
+
+          // ✅ tags required
+          tags: Array.isArray(v?.tags) && v.tags.length ? v.tags : ["default"],
+
+          // ✅ duration required by backend (default 60)
+          durationMin:
+            v?.durationMin != null && Number.isFinite(Number(v.durationMin))
+              ? Number(v.durationMin)
+              : 60,
+
+          durationDelta:
+            v?.durationDelta != null && Number.isFinite(Number(v.durationDelta))
+              ? Number(v.durationDelta)
+              : 0,
+        }))
+      : [],
+  };
+
   const res = await fetch("/api/admin/services", {
     method: "POST",
     headers: {
@@ -334,7 +371,7 @@ export async function createService(
       Accept: "application/json",
     },
     cache: "no-store",
-    body: JSON.stringify(payload),
+    body: JSON.stringify(safePayload),
   });
 
   const ct = res.headers.get("content-type") || "";
@@ -349,12 +386,10 @@ export async function createService(
     throw new Error(message);
   }
 
-  // Common response shapes: { data: { service } } | { service } | raw object
   const raw = (isJSON
     ? (data as any)?.data?.service ?? (data as any)?.service ?? (data as any)
     : undefined) as any | undefined;
 
-  // Optional external normalizer (for flexibility)
   const maybeNormalize = (globalThis as any)?.normalizeService as
     | ((input: any) => ServiceDetail)
     | undefined;
@@ -362,19 +397,15 @@ export async function createService(
   if (raw && typeof maybeNormalize === "function") {
     try {
       return maybeNormalize(raw);
-    } catch {
-      // fall through to manual normalization
-    }
+    } catch {}
   }
 
-  // Fallback manual normalization
-  const id =
-    String(
-      raw?.id ??
-        raw?._id ??
-        (globalThis.crypto?.randomUUID?.() ??
-          Math.random().toString(36).slice(2))
-    );
+  const id = String(
+    raw?.id ??
+      raw?._id ??
+      (globalThis.crypto?.randomUUID?.() ??
+        Math.random().toString(36).slice(2))
+  );
   const _id = String(raw?._id ?? id);
 
   const variants: ServiceVariant[] = Array.isArray(raw?.variants)
@@ -386,81 +417,65 @@ export async function createService(
               Math.random().toString(36).slice(2))
         ),
         name: String(v?.name ?? "Variant"),
-        priceDelta:
-          typeof v?.priceDelta === "number"
-            ? v.priceDelta
-            : typeof v?.price_delta === "number"
-            ? v.price_delta
-            : undefined,
         durationDelta:
           typeof v?.durationDelta === "number"
             ? v.durationDelta
             : typeof v?.duration_delta === "number"
             ? v.duration_delta
             : undefined,
-        defaultSelected:
-          typeof v?.defaultSelected === "boolean"
-            ? v.defaultSelected
-            : !!v?.default_selected,
-        isPopular:
-          typeof v?.isPopular === "boolean" ? v.isPopular : !!v?.is_popular,
+
         code: v?.code,
         image: v?.image,
+        description: v?.description,
+
         absolutePrice:
           typeof v?.absolutePrice === "number"
             ? v.absolutePrice
             : typeof v?.absolute_price === "number"
             ? v.absolute_price
             : undefined,
+
         compareAtPrice:
           typeof v?.compareAtPrice === "number"
             ? v.compareAtPrice
             : typeof v?.compare_at_price === "number"
             ? v.compare_at_price
             : undefined,
+
         segment: v?.segment,
       }))
-    : (payload.variants as ServiceVariant[]) ?? [];
+    : (safePayload.variants as any);
 
   const created: ServiceDetail = {
     id,
     _id,
-    name: String(raw?.name ?? payload.name ?? "Untitled Service"),
-    slug: String(raw?.slug ?? payload.slug ?? ""),
-    description: String(raw?.description ?? payload.description ?? ""),
+    name: String(raw?.name ?? safePayload.name ?? "Untitled Service"),
+    slug: String(raw?.slug ?? safePayload.slug ?? ""),
+    description: String(raw?.description ?? safePayload.description ?? ""),
 
-    image: String(raw?.image ?? payload.image ?? ""),
-    images: Array.isArray(raw?.images) ? raw.images : payload.images,
-    categoryId: String(
-      raw?.categoryId ?? raw?.category_id ?? payload.categoryId
-    ),
-    pricingModelId:
-      raw?.pricingModelId ?? raw?.pricing_model_id ?? payload.pricingModelId,
-    formTemplateId:
-      raw?.formTemplateId ?? raw?.form_template_id ?? payload.formTemplateId,
+    image: String(raw?.image ?? ""),
+    images: Array.isArray(raw?.images) ? raw.images : safePayload.images,
+    categoryId: String(raw?.categoryId ?? raw?.category_id ?? safePayload.categoryId),
+
+    formTemplateId: raw?.formTemplateId ?? raw?.form_template_id ?? safePayload.formTemplateId,
+
     variants,
-    basePrice: Number(
-      (typeof raw?.basePrice === "number"
-        ? raw.basePrice
-        : raw?.base_price) ??
-        payload.basePrice ??
-        0
-    ),
-    currency: (raw?.currency ?? payload.currency) as CurrencyCode | undefined,
+
+    // ✅ keep only for UI compat
+    basePrice: 0,
+
+    currency: (raw?.currency ?? undefined) as CurrencyCode | undefined,
     status: raw?.status as ServiceStatus | undefined,
-    active:
-      typeof raw?.active === "boolean"
-        ? raw.active
-        : typeof raw?.status === "string" &&
-          raw.status.toLowerCase() === "active"
-        ? true
-        : payload.active,
+    active: typeof raw?.active === "boolean" ? raw.active : safePayload.active,
+
     createdAt: raw?.createdAt ?? raw?.created_at,
     updatedAt: raw?.updatedAt ?? raw?.updated_at,
   };
 
   return created;
 }
+
+
 
 export async function fetchCategoriesWithServices(): Promise<
   CategoryWithServices[]

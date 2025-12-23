@@ -199,6 +199,13 @@ export type ServiceCard = {
 // Payloads (client → API)
 // ============================
 
+// ✅ UPDATE: types (CreateServicePayload + UpdateServicePayload)
+// - service price remove (basePrice optional, but we will force 0 in route)
+// - variant price MUST be absolutePrice
+// - durationMin + tags REQUIRED per variant
+
+// ✅ ONLY Variant price (absolutePrice) is used now
+
 export type CreateServicePayload = {
   name: string;
   slug?: string;
@@ -210,8 +217,9 @@ export type CreateServicePayload = {
   bookingType?: BookingType;
   quantityUnit?: QuantityUnit;
 
-  basePrice: number;
-  durationMin?: number;
+  // ✅ removed from UI (keep optional for backward compat)
+  basePrice?: number;
+
   teamSize?: number;
 
   minQty?: number;
@@ -237,19 +245,32 @@ export type CreateServicePayload = {
   tags?: string[];
   cities?: string[];
 
-  variants?: Array<{
+  // ✅ REQUIRED variants
+  variants: Array<{
     name: string;
-    priceDelta?: number;
+
+    // ✅ REQUIRED
+    absolutePrice: number;
+
+    // ✅ duration variant based (backend needs durationMin)
+    durationMin?: number;
     durationDelta?: number;
+
+    // ✅ REQUIRED tags (backend strict)
+    tags: string[];
+
     code?: string;
     description?: string;
     image?: string;
+
+    compareAtPrice?: number;
+    segment?: Segment;
+
+    defaultSelected?: boolean;
+    isPopular?: boolean;
   }>;
 
-  // ✅ Global addon ids selected in UI
   addonIds?: string[];
-
-  // legacy/direct addons (optional)
   addons?: ServiceAddon[];
 
   priceMatrix?: ServicePriceMatrixRow[];
@@ -265,6 +286,8 @@ export type CreateServicePayload = {
 export type UpdateServicePayload = Partial<CreateServicePayload> & {
   id: string;
 };
+
+
 
 // ============================
 // Dynamic form templates
