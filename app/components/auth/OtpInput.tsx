@@ -1,10 +1,10 @@
 "use client";
-import { useEffect, useRef } from "react";
+import React, { useEffect, useRef } from "react";
 
 export default function OtpInput({
   value,
   onChange,
-  length = 6,
+  length = 4, // ✅ default 4
 }: {
   value: string;
   onChange: (v: string) => void;
@@ -12,28 +12,43 @@ export default function OtpInput({
 }) {
   const inputs = useRef<(HTMLInputElement | null)[]>([]);
 
+  // ✅ always keep value trimmed to the correct length
+  useEffect(() => {
+    if (value.length > length) onChange(value.slice(0, length));
+  }, [value, length, onChange]);
+
   useEffect(() => {
     inputs.current[0]?.focus();
   }, []);
 
+  function setAt(i: number, digit: string) {
+    const arr = Array.from({ length }, (_, idx) => value[idx] ?? "");
+    arr[i] = digit;
+    onChange(arr.join(""));
+  }
+
   function handle(i: number, e: React.ChangeEvent<HTMLInputElement>) {
-    const v = e.target.value.replace(/\D/g, "").slice(-1);
-    const next = value.split("");
-    next[i] = v;
-    onChange(next.join(""));
+    const v = e.target.value.replace(/\D/g, "").slice(-1); // only 1 digit
+    setAt(i, v);
+
     if (v && i < length - 1) inputs.current[i + 1]?.focus();
   }
 
   function key(i: number, e: React.KeyboardEvent<HTMLInputElement>) {
     if (e.key === "Backspace") {
+      e.preventDefault();
+
       if (value[i]) {
-        const next = value.split("");
-        next[i] = "";
-        onChange(next.join(""));
+        setAt(i, "");
+        inputs.current[i]?.focus();
       } else if (i > 0) {
+        // ✅ move left and clear previous
         inputs.current[i - 1]?.focus();
+        setAt(i - 1, "");
       }
+      return;
     }
+
     if (e.key === "ArrowLeft" && i > 0) inputs.current[i - 1]?.focus();
     if (e.key === "ArrowRight" && i < length - 1) inputs.current[i + 1]?.focus();
   }
@@ -41,9 +56,11 @@ export default function OtpInput({
   function paste(e: React.ClipboardEvent<HTMLDivElement>) {
     const text = e.clipboardData.getData("text").replace(/\D/g, "").slice(0, length);
     if (!text) return;
-    const next = value.split("");
-    for (let i = 0; i < length; i++) next[i] = text[i] ?? next[i] ?? "";
-    onChange(next.join(""));
+
+    const arr = Array.from({ length }, (_, idx) => value[idx] ?? "");
+    for (let i = 0; i < length; i++) arr[i] = text[i] ?? "";
+
+    onChange(arr.join(""));
     const last = Math.min(text.length, length) - 1;
     if (last >= 0) inputs.current[last]?.focus();
   }

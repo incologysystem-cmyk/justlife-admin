@@ -1,4 +1,3 @@
-// app/(provider)/login/page.tsx  (ya jahan bhi tumhari file hai)
 "use client";
 
 import { useEffect, useRef, useState } from "react";
@@ -6,26 +5,18 @@ import Image from "next/image";
 import { toast } from "sonner";
 import OtpInput from "@/app/components/auth/OtpInput";
 
-const DEFAULT_CODE_LEN = 6;
+const DEFAULT_CODE_LEN = 4; // ✅ change to 4
 
 type UserRole = "customer" | "provider" | "admin" | string;
 
 type OtpVerifyResponse = {
   success?: boolean;
-  user?: {
-    role?: UserRole;
-    [key: string]: any;
-  };
-  data?: {
-    user?: {
-      role?: UserRole;
-      [key: string]: any;
-    };
-  };
+  user?: { role?: UserRole; [key: string]: any };
+  data?: { user?: { role?: UserRole; [key: string]: any } };
   token?: string;
   error?: string;
   message?: string;
-  codeLength?: number;
+  codeLength?: number; // backend may send 4 or 6
 };
 
 export default function LoginPage() {
@@ -81,8 +72,6 @@ export default function LoginPage() {
         requireProvider: true,
       };
 
-      console.log("PROVIDER OTP START PAYLOAD ->", payload);
-
       const r = await fetch("/api/auth/otp/start?requireProvider=1", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -91,9 +80,6 @@ export default function LoginPage() {
 
       const j = await r.json().catch(() => ({} as any));
 
-      console.log("PROVIDER OTP START RESPONSE ->", j);
-
-      // ❌ Backend ne reject kiya
       if (!r.ok || j.error) {
         const msg =
           j.error ||
@@ -101,9 +87,8 @@ export default function LoginPage() {
           (r.status === 400
             ? "This number is not registered as a provider"
             : "Failed to send OTP");
-
         toast.error(msg);
-        return; // yahin ruk jao, OTP step pe mat jao
+        return;
       }
 
       if (!j.requestId) {
@@ -111,15 +96,17 @@ export default function LoginPage() {
         return;
       }
 
-      // ✅ Success flow
+      // ✅ if backend gives codeLength use it, otherwise default 4
+      const len = Number(j.codeLength || DEFAULT_CODE_LEN);
       setRequestId(j.requestId);
-      setCodeLen(j.codeLength || DEFAULT_CODE_LEN);
+      setCodeLen(Number.isFinite(len) && len > 0 ? len : DEFAULT_CODE_LEN);
+
+      // ✅ important: reset code when switching len
       setCode("");
       setStep("otp");
       startCooldown(30);
       toast.success("OTP sent to WhatsApp");
     } catch (e: any) {
-      console.error("PROVIDER OTP START ERROR ->", e);
       toast.error(e?.message || "Failed to send OTP");
     } finally {
       setLoading(false);
@@ -140,22 +127,12 @@ export default function LoginPage() {
       });
 
       const j: OtpVerifyResponse = await r.json().catch(() => ({} as any));
-      console.log("PROVIDER OTP VERIFY RESPONSE ->", j);
 
-      if (!r.ok || j.error) {
-        throw new Error(j.error || j.message || "Invalid OTP");
-      }
+      if (!r.ok || j.error) throw new Error(j.error || j.message || "Invalid OTP");
 
-      const user =
-        j.user ||
-        (j.data && j.data.user) ||
-        undefined;
+      const user = j.user || j.data?.user;
+      if (!user) throw new Error("User info missing in OTP response");
 
-      if (!user) {
-        throw new Error("User info missing in OTP response");
-      }
-
-      // Extra safety: sirf provider ko aage jaane do
       if (user.role !== "provider") {
         throw new Error("This number is not registered as a provider");
       }
@@ -163,7 +140,6 @@ export default function LoginPage() {
       toast.success("Signed in as provider");
       window.location.href = next;
     } catch (e: any) {
-      console.error("PROVIDER OTP VERIFY ERROR ->", e);
       toast.error(e?.message || "Verification failed");
     } finally {
       setLoading(false);
@@ -172,7 +148,6 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen flex">
-      {/* LEFT 50% — FULL HEIGHT FORM */}
       <div className="w-full md:w-1/2 flex items-center justify-center bg-gray-50 px-8 py-10 text-gray-800">
         <div className="w-full max-w-md space-y-6">
           <div className="space-y-1">
@@ -206,7 +181,9 @@ export default function LoginPage() {
               <label className="text-xs font-medium text-gray-700">
                 Enter {codeLen}-digit code
               </label>
-              <OtpInput value={code} onChange={setCode} length={codeLen} />
+
+              {/* ✅ key forces remount when length changes (important when switching 6->4) */}
+              <OtpInput key={codeLen} value={code} onChange={setCode} length={codeLen} />
 
               <button
                 onClick={verify}
@@ -225,7 +202,10 @@ export default function LoginPage() {
               </button>
 
               <button
-                onClick={() => setStep("phone")}
+                onClick={() => {
+                  setCode("");
+                  setStep("phone");
+                }}
                 className="w-full py-2 text-xs text-gray-600 underline"
               >
                 Change Phone
@@ -242,7 +222,6 @@ export default function LoginPage() {
         </div>
       </div>
 
-      {/* RIGHT 50% — FULL HEIGHT IMAGE */}
       <div className="hidden md:block w-1/2 relative">
         <Image
           src="/ru-service-provider.png"
