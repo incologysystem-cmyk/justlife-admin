@@ -3,6 +3,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
+import type { Route } from "next"; // ✅ add
 import {
   fetchProviderPromocodeById,
   deleteProviderPromocode,
@@ -56,7 +57,8 @@ export default function ProviderPromocodeDetailPage() {
   }, [loadPromocode]);
 
   const goBack = () => {
-    router.push("/promocodes");
+    // ✅ keep one consistent route (provider panel)
+    router.push("/provider/promocodes" as Route);
   };
 
   const handleDelete = async () => {
@@ -65,7 +67,9 @@ export default function ProviderPromocodeDetailPage() {
       setDeleting(true);
       setDeleteError(null);
       await deleteProviderPromocode(promo._id);
-      router.push("/provider/promocodes");
+
+      // ✅ typed-route cast
+      router.push("/provider/promocodes" as Route);
     } catch (err: any) {
       console.error("Delete promocode error:", err);
       setDeleteError(err?.message || "Failed to delete promocode");
@@ -143,7 +147,7 @@ export default function ProviderPromocodeDetailPage() {
     ? `${promo.amount}% off`
     : promo.currency
     ? `${promo.currency} ${promo.amount}`
-    : promo.amount;
+    : String(promo.amount);
 
   const usageLabel = promo.maxUsage
     ? `${promo.usedCount ?? 0} / ${promo.maxUsage}`
@@ -240,17 +244,13 @@ export default function ProviderPromocodeDetailPage() {
           <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
             Starts at
           </p>
-          <p className="mt-1 text-sm font-medium">
-            {fmtDateTime(promo.startsAt)}
-          </p>
+          <p className="mt-1 text-sm font-medium">{fmtDateTime(promo.startsAt)}</p>
         </div>
         <div className="rounded-2xl border bg-card p-3 shadow-sm">
           <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
             Ends at
           </p>
-          <p className="mt-1 text-sm font-medium">
-            {fmtDateTime(promo.endsAt)}
-          </p>
+          <p className="mt-1 text-sm font-medium">{fmtDateTime(promo.endsAt)}</p>
         </div>
       </div>
 
@@ -292,30 +292,22 @@ export default function ProviderPromocodeDetailPage() {
           <dl className="mt-1 space-y-3 text-sm">
             <div className="flex items-start justify-between gap-4">
               <dt className="text-muted-foreground">Starts at</dt>
-              <dd className="font-medium text-right">
-                {fmtDateTime(promo.startsAt)}
-              </dd>
+              <dd className="font-medium text-right">{fmtDateTime(promo.startsAt)}</dd>
             </div>
 
             <div className="flex items-start justify-between gap-4">
               <dt className="text-muted-foreground">Ends at</dt>
-              <dd className="font-medium text-right">
-                {fmtDateTime(promo.endsAt)}
-              </dd>
+              <dd className="font-medium text-right">{fmtDateTime(promo.endsAt)}</dd>
             </div>
 
             <div className="flex items-start justify-between gap-4">
               <dt className="text-muted-foreground">Created at</dt>
-              <dd className="font-medium text-right">
-                {fmtDateTime(promo.createdAt)}
-              </dd>
+              <dd className="font-medium text-right">{fmtDateTime(promo.createdAt)}</dd>
             </div>
 
             <div className="flex items-start justify-between gap-4">
               <dt className="text-muted-foreground">Last updated</dt>
-              <dd className="font-medium text-right">
-                {fmtDateTime(promo.updatedAt)}
-              </dd>
+              <dd className="font-medium text-right">{fmtDateTime(promo.updatedAt)}</dd>
             </div>
           </dl>
         </section>
@@ -364,8 +356,7 @@ export default function ProviderPromocodeDetailPage() {
             </p>
 
             <div className="mt-4 rounded-xl bg-slate-50 p-3 text-xs text-slate-700">
-              <span className="font-semibold">Promocode ID:</span>{" "}
-              {promo._id}
+              <span className="font-semibold">Promocode ID:</span> {promo._id}
             </div>
 
             {deleteError && (
@@ -390,9 +381,7 @@ export default function ProviderPromocodeDetailPage() {
                 onClick={handleDelete}
                 className="inline-flex items-center gap-1"
               >
-                {deleting && (
-                  <Loader2 className="h-3 w-3 animate-spin" />
-                )}
+                {deleting && <Loader2 className="h-3 w-3 animate-spin" />}
                 {deleting ? "Deleting…" : "Yes, delete"}
               </Button>
             </div>
@@ -433,9 +422,7 @@ function StatusBadge({ status }: { status: PromoStatus }) {
 
   if (status === "active") {
     return (
-      <Badge className={`${base} bg-emerald-100 text-emerald-800`}>
-        Active
-      </Badge>
+      <Badge className={`${base} bg-emerald-100 text-emerald-800`}>Active</Badge>
     );
   }
   if (status === "scheduled") {
@@ -453,7 +440,5 @@ function StatusBadge({ status }: { status: PromoStatus }) {
       <Badge className={`${base} bg-rose-100 text-rose-800`}>Disabled</Badge>
     );
   }
-  return (
-    <Badge className={`${base} bg-slate-100 text-slate-800`}>{status}</Badge>
-  );
+  return <Badge className={`${base} bg-slate-100 text-slate-800`}>{status}</Badge>;
 }

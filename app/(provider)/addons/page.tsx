@@ -2,7 +2,12 @@
 
 import React, { useEffect, useState } from "react";
 import AddAddonModal, { AddonPayload } from "./AddAddonModal";
-import { fetchAddons, createAddon, deleteAddon, AddonDto } from "@/app/services/addonsApi";
+import {
+  fetchAddons,
+  createAddon,
+  deleteAddon,
+  AddonDto,
+} from "@/app/services/addonsApi";
 import { Trash2 } from "lucide-react";
 
 type SavedAddon = AddonDto & {
@@ -23,10 +28,12 @@ export default function AddonsPage() {
     const load = async () => {
       try {
         const items = await fetchAddons(false); // admin/provider panel, show all
-        const mapped: SavedAddon[] = (Array.isArray(items) ? items : []).map((a) => ({
-          ...a,
-          imagePreview: a.imageUrl ?? null,
-        }));
+        const mapped: SavedAddon[] = (Array.isArray(items) ? items : []).map(
+          (a) => ({
+            ...a,
+            imagePreview: a.imageUrl ?? null,
+          })
+        );
         setSavedAddons(mapped);
       } catch (err) {
         console.error(err);
@@ -39,10 +46,9 @@ export default function AddonsPage() {
   }, []);
 
   /**
-   * ✅ IMPORTANT CHANGE:
-   * onSave now returns boolean
-   * true  => modal will close + reset (inside modal)
-   * false => modal stays open
+   * ✅ Updated to match AddAddonModal:
+   * return true  => modal closes + resets (inside modal)
+   * return false => modal stays open
    */
   const handleSaveAddon = async (data: AddonPayload): Promise<boolean> => {
     try {
@@ -54,11 +60,11 @@ export default function AddonsPage() {
       };
 
       setSavedAddons((prev) => [saved, ...prev]);
-      return true; // ✅ success
+      return true;
     } catch (err) {
       console.error(err);
       alert("Failed to create add-on. Please check the console for details.");
-      return false; // ✅ fail (modal should not close)
+      return false;
     }
   };
 
@@ -74,7 +80,9 @@ export default function AddonsPage() {
     try {
       setIsDeleting(true);
       await deleteAddon(addonToDelete._id);
-      setSavedAddons((prev) => prev.filter((a) => a._id !== addonToDelete._id));
+      setSavedAddons((prev) =>
+        prev.filter((a) => a._id !== addonToDelete._id)
+      );
       setAddonToDelete(null);
     } catch (err) {
       console.error(err);
@@ -94,7 +102,9 @@ export default function AddonsPage() {
         {/* Page header */}
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-8">
           <div>
-            <h1 className="text-2xl md:text-3xl font-semibold text-slate-900">Add-ons</h1>
+            <h1 className="text-2xl md:text-3xl font-semibold text-slate-900">
+              Add-ons
+            </h1>
             <p className="text-sm text-slate-500 mt-1">
               Manage add-ons that can be attached to your bookings.
             </p>
@@ -116,7 +126,8 @@ export default function AddonsPage() {
             <p className="text-sm text-slate-500">Loading add-ons...</p>
           ) : savedAddons.length === 0 ? (
             <p className="text-sm text-slate-500">
-              No add-ons have been created yet. Use the &quot;Add add-on&quot; button above to create your first add-on.
+              No add-ons have been created yet. Use the &quot;Add add-on&quot;
+              button above to create your first add-on.
             </p>
           ) : (
             <div className="grid gap-4 md:gap-6 md:grid-cols-2">
@@ -134,9 +145,13 @@ export default function AddonsPage() {
                   )}
 
                   <div className="flex-1 min-w-0">
-                    <h2 className="text-sm font-semibold text-slate-900 truncate">{addon.title}</h2>
+                    <h2 className="text-sm font-semibold text-slate-900 truncate">
+                      {addon.title}
+                    </h2>
                     {addon.description && (
-                      <p className="text-xs text-slate-500 mt-1 line-clamp-2">{addon.description}</p>
+                      <p className="text-xs text-slate-500 mt-1 line-clamp-2">
+                        {addon.description}
+                      </p>
                     )}
                   </div>
 
@@ -166,11 +181,15 @@ export default function AddonsPage() {
         {addonToDelete && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
             <div className="w-full max-w-sm rounded-2xl bg-white shadow-xl border border-slate-200 p-5">
-              <h2 className="text-sm font-semibold text-slate-900 mb-2">Delete add-on?</h2>
+              <h2 className="text-sm font-semibold text-slate-900 mb-2">
+                Delete add-on?
+              </h2>
               <p className="text-xs text-slate-600 mb-4">
                 Are you sure you want to delete{" "}
-                <span className="font-semibold">&quot;{addonToDelete.title}&quot;</span>?
-                This add-on will no longer be available to attach to bookings.
+                <span className="font-semibold">
+                  &quot;{addonToDelete.title}&quot;
+                </span>
+                ? This add-on will no longer be available to attach to bookings.
               </p>
 
               <div className="flex justify-end gap-2">

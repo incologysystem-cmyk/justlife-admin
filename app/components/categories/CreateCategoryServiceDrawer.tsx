@@ -21,17 +21,48 @@ function pickId(input: any): string {
   return id;
 }
 
+// ✅ safe number extractor
+function toNum(v: any, fallback = 0) {
+  const n = typeof v === "number" ? v : Number(v);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+// ✅ derive base price without relying on payload.basePrice (which doesn't exist)
+function deriveBasePrice(payload: any, svcRaw: any): number {
+  // backend priority
+  const fromBackend =
+    svcRaw?.basePrice ??
+    svcRaw?.absolutePrice ??
+    svcRaw?.price ??
+    svcRaw?.unitPrice ??
+    svcRaw?.pricing?.basePrice;
+
+  if (fromBackend != null) return toNum(fromBackend, 0);
+
+  // payload fallback (ServiceForm payload commonly has absolutePrice or variants)
+  const fromPayload =
+    payload?.absolutePrice ??
+    payload?.price ??
+    payload?.unitPrice ??
+    payload?.variants?.[0]?.unitPrice ??
+    payload?.variants?.[0]?.absolutePrice;
+
+  return toNum(fromPayload, 0);
+}
 
 async function uploadCategoryImage(categoryId: string, file: File) {
   const fd = new FormData();
   // ✅ key MUST be "image"
   fd.set("image", file);
 
-  const res = await fetch(`/api/admin/categories/${encodeURIComponent(categoryId)}/image`, {
-    method: "POST",
-    body: fd, // ✅ FormData
-    cache: "no-store",
-  });
+  const res = await fetch(
+    `/api/admin/categories/${encodeURIComponent(categoryId)}/image`,
+    {
+      method: "POST",
+      body: fd,
+      cache: "no-store",
+    }
+  );
 
   const ct = res.headers.get("content-type") || "";
   const isJSON = ct.includes("application/json");
@@ -47,9 +78,6 @@ async function uploadCategoryImage(categoryId: string, file: File) {
 
   return data;
 }
-
-
-
 
 export default function CreateCategoryServiceDrawer({
   categories,
@@ -102,24 +130,36 @@ export default function CreateCategoryServiceDrawer({
       </div>
 
       {step === 1 ? (
-<CategoryForm
-  onSubmit={async (payload) => {
-    // create category (JSON)
-    return await createCategory(payload as any); 
-  }}
-  onUploadImage={uploadCategoryImage} // ✅ THIS IS REQUIRED
-  onNext={goService}
-  createLabel="Create & Continue"
-  skipLabel="Skip Category → Service"
-/>
+        <CategoryForm
+          onSubmit={async (payload) => {
+            const created: any = await createCategory(payload as any);
 
+            // ✅ If you want to immediately add the new category in UI
+            const id = pickId(created);
+            const cat: Category = {
+              id,
+              _id: id as any,
+              name: String(created?.name ?? payload?.name ?? ""),
+              slug: String(created?.slug ?? slugify(created?.name ?? payload?.name ?? "")),
+              ...(created as any),
+            };
 
+            setNewCat(cat);
+            onCategoryCreated(cat);
+
+            return created;
+          }}
+          onUploadImage={uploadCategoryImage}
+          onNext={goService}
+          createLabel="Create & Continue"
+          skipLabel="Skip Category → Service"
+        />
       ) : (
         <ServiceForm
           categories={availableCats}
           defaultCategoryId={newCat?.id}
           onCancel={onClose}
-          onSubmit={async (payload) => {
+          onSubmit={async (payload: any) => {
             const categoryId = payload.categoryId || newCat?.id;
 
             if (!categoryId) {
@@ -140,9 +180,12 @@ export default function CreateCategoryServiceDrawer({
 
             const minimal = {
               id: svcId,
-              name: String(svcRaw?.name ?? payload.name ?? "Untitled"),
-              categoryId: String(svcRaw?.categoryId ?? normalized.categoryId ?? ""),
-              basePrice: Number(svcRaw?.basePrice ?? normalized.basePrice ?? 0),
+              name: String(svcRaw?.name ?? payload?.name ?? "Untitled"),
+              categoryId: String(
+                svcRaw?.categoryId ?? normalized.categoryId ?? ""
+              ),
+              // ✅ fixed: no normalized.basePrice usage
+              basePrice: deriveBasePrice(payload, svcRaw),
             };
 
             onServiceCreated(minimal);

@@ -3,6 +3,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
+import type { Route } from "next";
 import Link from "next/link";
 
 type Booking = {
@@ -212,13 +213,16 @@ export default function ProviderBookingDetailPage() {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="space-y-1">
           <div className="flex items-center gap-2 text-[11px] text-slate-500">
-            <Link href="/dashboard" className="hover:text-slate-700">
+            {/* <Link href="/dashboard" className="hover:text-slate-700">
+             */}
+              <Link href={"/dashboard" as Route} className="hover:text-slate-700">
               Dashboard
             </Link>
             <span>/</span>
-            <Link href="/dashboard/bookings" className="hover:text-slate-700">
-              Bookings
-            </Link>
+             <Link
+              href={"/dashboard/bookings" as Route}
+              className="hover:text-slate-700"
+            ></Link>
             <span>/</span>
             <span>Detail</span>
           </div>

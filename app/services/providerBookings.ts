@@ -23,6 +23,27 @@ async function handleJsonResponse<T>(res: Response): Promise<T> {
   return json as T;
 }
 
+// ✅ helpers
+function asIsoDate(value: any, fallback = new Date().toISOString()): string {
+  const v = value ?? fallback;
+  const d = new Date(v);
+  return Number.isNaN(d.getTime()) ? fallback : d.toISOString();
+}
+
+function normalizeStatus(raw: any): Booking["status"] {
+  const s = String(raw || "").toLowerCase();
+  if (s === "pending" || s === "confirmed" || s === "completed" || s === "cancelled") {
+    return s;
+  }
+
+  // backend variants mapping (optional)
+  if (s === "paid" || s === "scheduled") return "confirmed";
+  if (s === "in_progress" || s === "assigned" || s === "en_route") return "confirmed";
+  if (s === "refunded") return "cancelled";
+
+  return "pending";
+}
+
 /**
  * 🔹 List provider bookings
  * GET /api/provider/bookings
@@ -40,6 +61,8 @@ export async function fetchProviderBookings(): Promise<{
   const res = await fetch(API_PREFIX, {
     method: "GET",
     credentials: "include",
+    cache: "no-store",
+    headers: { Accept: "application/json" },
   });
 
   const json = await handleJsonResponse<{
@@ -49,41 +72,56 @@ export async function fetchProviderBookings(): Promise<{
     pagination?: any;
   }>(res);
 
-  const rawItems: any[] =
-    json.data?.items ??
-    json.items ??
-    [];
-
+  const rawItems: any[] = json.data?.items ?? json.items ?? [];
   const pagination = json.data?.pagination ?? json.pagination;
 
-  const bookings: Booking[] = rawItems.map((b: any) => {
-    const scheduledAt =
-      b.schedule?.startAt ||
-      b.scheduledAt ||
-      b.date ||
-      b.createdAt ||
-      new Date().toISOString();
+  const bookings: Booking[] = rawItems.map((b: any): Booking => {
+    // ✅ createdAt required in type
+    const createdAt = asIsoDate(b.createdAt ?? b.created_at ?? b?.meta?.createdAt);
+
+    // scheduledAt can come from schedule.startAt etc
+    const scheduledAt = asIsoDate(
+      b.schedule?.startAt ??
+        b.scheduledAt ??
+        b.scheduled_at ??
+        b.date ??
+        b.startAt ??
+        createdAt, // fallback to createdAt
+      createdAt
+    );
 
     const totalAmount =
       typeof b.price?.total === "number"
         ? b.price.total
+        : typeof b.totalAmount === "number"
+        ? b.totalAmount
         : typeof b.total === "number"
         ? b.total
         : 0;
 
+    const customerId = String(b.customerId ?? b.customer?._id ?? b.customer?.id ?? "");
+    const customerName = String(
+      b.customerName ??
+        b.customer?.name ??
+        [b.customer?.firstName, b.customer?.lastName].filter(Boolean).join(" ") ??
+        ""
+    );
+
+    // NOTE: Booking type me customerEmail hai hi nahi (tumhare shared type me),
+    // isliye yahan include nahi kar rahe.
+    // Agar tum email bhi chahte ho to types/booking.ts me add karo as optional.
+
     return {
-      _id: b._id || b.id,
-      code: b.code || b.bookingCode || "",
-      customerId: b.customerId || "",
-      customerName: b.customerName || "",
-      customerEmail: b.customerEmail || "",
-      serviceId: b.serviceId || "",
-      serviceName: b.serviceName || "",
-      city: b.address?.city,
-      status: b.status || "paid",
+      _id: String(b._id ?? b.id ?? ""),
+      code: String(b.code ?? b.bookingCode ?? ""),
+      customerId,
+      customerName,
+      serviceName: String(b.serviceName ?? b.service?.name ?? ""),
+      status: normalizeStatus(b.status),
       scheduledAt,
+      createdAt,
       totalAmount,
-    } as Booking;
+    };
   });
 
   return {
@@ -100,13 +138,13 @@ export async function fetchProviderBookings(): Promise<{
 export async function fetchProviderBookingById(
   id: string
 ): Promise<{ success: boolean; booking: any }> {
-  if (!id) {
-    throw new Error("Booking id is required");
-  }
+  if (!id) throw new Error("Booking id is required");
 
   const res = await fetch(`${API_PREFIX}/${encodeURIComponent(id)}`, {
     method: "GET",
     credentials: "include",
+    cache: "no-store",
+    headers: { Accept: "application/json" },
   });
 
   const json = await handleJsonResponse<{

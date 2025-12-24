@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import type { Route } from "next";
 import { usePathname, useRouter } from "next/navigation";
 import { ReactNode, useState } from "react";
 
@@ -27,14 +28,13 @@ export function Sidebar() {
     try {
       setLoading(true);
 
-      // API call to backend to clear cookie
       await fetch("/api/auth/logout", {
         method: "POST",
         credentials: "include",
       });
 
-      // Redirect to login page
-      router.push("/admin/login");
+      // ✅ typed-route safe
+      router.push("/admin/login" as Route);
     } catch (error) {
       console.error("Logout failed:", error);
     } finally {
@@ -61,14 +61,14 @@ export function Sidebar() {
           return (
             <Link
               key={item.href}
-              href={item.href}
+              href={(item.href as unknown) as Route}
               className={`flex items-center px-5 py-2.5 text-sm font-medium transition ${
                 active
                   ? "bg-blue-50 text-blue-700 border-r-4 border-blue-500"
                   : "text-slate-600 hover:bg-slate-50"
               }`}
             >
-              <span className="mr-2">{item.icon}</span>
+              {item.icon ? <span className="mr-2">{item.icon}</span> : null}
               {item.label}
             </Link>
           );
@@ -80,7 +80,7 @@ export function Sidebar() {
         <button
           onClick={handleLogout}
           disabled={loading}
-          className="w-full text-left text-sm font-medium text-red-600 hover:text-red-700 hover:bg-red-50 px-3 py-2 rounded-md transition"
+          className="w-full text-left text-sm font-medium text-red-600 hover:text-red-700 hover:bg-red-50 px-3 py-2 rounded-md transition disabled:opacity-60"
         >
           {loading ? "Logging out…" : "Logout"}
         </button>

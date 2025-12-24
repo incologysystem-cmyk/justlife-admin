@@ -6,6 +6,8 @@ import { serverFetch } from "@/lib/serverFetch";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+type RouteCtx = { params: Promise<{ id: string }> };
+
 function base() {
   const b =
     process.env.API_BASE?.replace(/\/$/, "") ||
@@ -54,7 +56,12 @@ function normalizePatch(input: any) {
     perUnitPrice: Number.isFinite(priceNum as number) ? (priceNum as number) : undefined,
     categoryId:
       raw.categoryId ?? raw.category_id ?? raw.category?.id ?? raw.category?._id
-        ? String(raw.categoryId ?? raw.category_id ?? raw.category?.id ?? raw.category?._id)
+        ? String(
+            raw.categoryId ??
+              raw.category_id ??
+              raw.category?.id ??
+              raw.category?._id
+          )
         : undefined,
     imageBase64: typeof raw.imageBase64 === "string" ? raw.imageBase64 : undefined,
     imageUrl: typeof raw.imageUrl === "string" ? raw.imageUrl : undefined,
@@ -62,11 +69,12 @@ function normalizePatch(input: any) {
 }
 
 // GET /api/provider/addons/:id  → backend /api/addons/:id
-export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(_req: NextRequest, { params }: RouteCtx) {
   try {
+    const { id } = await params; // ✅ important
     const headers = await authHeaders();
 
-    const out = await serverFetch<any>(`${base()}/api/addons/${params.id}`, {
+    const out = await serverFetch<any>(`${base()}/api/addons/${id}`, {
       method: "GET",
       headers: { ...headers, Accept: "application/json" },
     });
@@ -75,21 +83,26 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
   } catch (e: any) {
     console.error("GET /api/provider/addons/[id] error:", e);
     return NextResponse.json(
-      { ok: false, message: e?.message || "Failed to fetch addon", error: e?.body ?? undefined },
+      {
+        ok: false,
+        message: e?.message || "Failed to fetch addon",
+        error: e?.body ?? undefined,
+      },
       { status: e?.status ?? 500 }
     );
   }
 }
 
 // PATCH /api/provider/addons/:id → backend PATCH /api/addons/:id
-export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
+export async function PATCH(req: NextRequest, { params }: RouteCtx) {
   try {
+    const { id } = await params; // ✅ important
     const body = await req.json().catch(() => ({}));
     const headers = await authHeaders();
 
     const normalized = normalizePatch(body);
 
-    const out = await serverFetch<any>(`${base()}/api/addons/${params.id}`, {
+    const out = await serverFetch<any>(`${base()}/api/addons/${id}`, {
       method: "PATCH",
       headers: {
         ...headers,
@@ -103,18 +116,23 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   } catch (e: any) {
     console.error("PATCH /api/provider/addons/[id] error:", e);
     return NextResponse.json(
-      { ok: false, message: e?.message || "Failed to update addon", error: e?.body ?? undefined },
+      {
+        ok: false,
+        message: e?.message || "Failed to update addon",
+        error: e?.body ?? undefined,
+      },
       { status: e?.status ?? 500 }
     );
   }
 }
 
 // DELETE /api/provider/addons/:id → backend DELETE /api/addons/:id
-export async function DELETE(_req: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(_req: NextRequest, { params }: RouteCtx) {
   try {
+    const { id } = await params; // ✅ important
     const headers = await authHeaders();
 
-    const out = await serverFetch<any>(`${base()}/api/addons/${params.id}`, {
+    const out = await serverFetch<any>(`${base()}/api/addons/${id}`, {
       method: "DELETE",
       headers: { ...headers, Accept: "application/json" },
     });
@@ -123,7 +141,11 @@ export async function DELETE(_req: NextRequest, { params }: { params: { id: stri
   } catch (e: any) {
     console.error("DELETE /api/provider/addons/[id] error:", e);
     return NextResponse.json(
-      { ok: false, message: e?.message || "Failed to delete addon", error: e?.body ?? undefined },
+      {
+        ok: false,
+        message: e?.message || "Failed to delete addon",
+        error: e?.body ?? undefined,
+      },
       { status: e?.status ?? 500 }
     );
   }
@@ -132,6 +154,7 @@ export async function DELETE(_req: NextRequest, { params }: { params: { id: stri
 export async function OPTIONS() {
   return NextResponse.json({ ok: true });
 }
+
 export async function HEAD() {
-  return NextResponse.json({ ok: true });
+  return new NextResponse(null, { status: 200 });
 }

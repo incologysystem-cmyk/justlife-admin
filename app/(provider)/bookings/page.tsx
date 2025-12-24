@@ -2,6 +2,7 @@ import Link from "next/link";
 import { unstable_noStore as noStore } from "next/cache";
 import { fetchBookings } from "@/lib/api";
 import BookingsClient from "./BookingsClient";
+import { Route } from "next";
 
 export const dynamic = "force-dynamic";
 
@@ -42,7 +43,7 @@ export default async function BookingsPage() {
         </p>
         <div className="mt-4">
           <Link
-            href="/login"
+            href={"/login" as Route}
             className="inline-flex items-center rounded-md border px-3 py-1.5 text-sm"
           >
             Go to Login

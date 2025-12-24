@@ -12,9 +12,11 @@ import type { Provider } from "@/types/provider";
 import { Table, Th, Td } from "@/app/components/admin/Table";
 
 export default function ProviderDetailPage() {
-  const params = useParams<{ id: string }>();
-  const id = params.id;
+  const params = useParams<{ id?: string }>();
   const router = useRouter();
+
+  const idRaw = params?.id;
+  const id = Array.isArray(idRaw) ? idRaw[0] : idRaw;
 
   const [provider, setProvider] = useState<Provider | null>(null);
   const [loading, setLoading] = useState(true);
@@ -24,19 +26,35 @@ export default function ProviderDetailPage() {
   const [showRejectConfirm, setShowRejectConfirm] = useState(false);
 
   useEffect(() => {
+    if (!id) {
+      setError("Invalid provider id");
+      setLoading(false);
+      return;
+    }
+
     let mounted = true;
+
     (async () => {
       try {
+        setLoading(true);
+        setError(null);
+
         const res = await fetchProviderById(id);
+
+        const p = res?.provider;
+        if (!p) throw new Error("Provider not found");
+
         if (!mounted) return;
-        setProvider(res.provider);
+        setProvider(p);
       } catch (err: any) {
         if (!mounted) return;
         setError(err?.message || "Failed to load provider");
+        setProvider(null);
       } finally {
         if (mounted) setLoading(false);
       }
     })();
+
     return () => {
       mounted = false;
     };
@@ -44,7 +62,6 @@ export default function ProviderDetailPage() {
 
   const handleApprove = async () => {
     if (!provider) return;
-    // extra safety: agar already approved hai to kuch na karo
     if (provider.status === "approved") return;
 
     setActionLoading(true);
@@ -54,7 +71,11 @@ export default function ProviderDetailPage() {
         provider._id,
         adminComment || undefined
       );
-      setProvider(res.provider);
+
+      const p = res?.provider;
+      if (!p) throw new Error("Approve succeeded but provider missing in response");
+
+      setProvider(p);
       router.push("/admin/providers/requests");
     } catch (err: any) {
       setError(err?.message || "Failed to approve provider");
@@ -66,13 +87,17 @@ export default function ProviderDetailPage() {
   const performReject = async () => {
     if (!provider) return;
     if (!adminComment.trim()) return;
-    if (provider.status === "approved") return; // approved ko reject nahi karna yahan se
+    if (provider.status === "approved") return;
 
     setActionLoading(true);
     setError(null);
     try {
       const res = await rejectProviderApi(provider._id, adminComment.trim());
-      setProvider(res.provider);
+
+      const p = res?.provider;
+      if (!p) throw new Error("Reject succeeded but provider missing in response");
+
+      setProvider(p);
       setShowRejectConfirm(false);
       router.push("/admin/providers/requests");
     } catch (err: any) {
@@ -90,7 +115,7 @@ export default function ProviderDetailPage() {
   if (loading) {
     return <p className="text-sm text-slate-500">Loading provider…</p>;
   }
-  if (error) {
+  if (error && !provider) {
     return <p className="text-sm text-red-600">{error}</p>;
   }
   if (!provider) {
@@ -115,7 +140,7 @@ export default function ProviderDetailPage() {
             </div>
             <div>
               <span className="font-medium">DED License: </span>
-              {provider.dedLicenseNo}
+              {provider.dedLicenseNo || "—"}
             </div>
             <div>
               <span className="font-medium">Legal Form: </span>
@@ -154,13 +179,11 @@ export default function ProviderDetailPage() {
               </div>
               <div>
                 <span className="font-medium">User Role: </span>
-                {user.role}
+                {user.role || "—"}
               </div>
             </div>
           ) : (
-            <p className="text-sm text-slate-500">
-              User record not populated.
-            </p>
+            <p className="text-sm text-slate-500">User record not populated.</p>
           )}
         </div>
       </section>
@@ -169,12 +192,12 @@ export default function ProviderDetailPage() {
       <section className="space-y-3">
         <h3 className="text-sm font-semibold">Service Categories (Activities)</h3>
         <div className="flex flex-wrap gap-2">
-          {provider.activities.map((a) => (
+          {(provider.activities || []).map((a) => (
             <span
-              key={a.name + a.code}
+              key={(a?.name || "") + (a?.code || "")}
               className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-800"
             >
-              {a.name}
+              {a?.name || "—"}
             </span>
           ))}
         </div>
@@ -183,7 +206,7 @@ export default function ProviderDetailPage() {
       {/* Addresses */}
       <section className="space-y-3">
         <h3 className="text-sm font-semibold">Addresses</h3>
-        {provider.addresses.length === 0 ? (
+        {(provider.addresses || []).length === 0 ? (
           <p className="text-sm text-slate-500">No address data.</p>
         ) : (
           <Table>
@@ -196,12 +219,12 @@ export default function ProviderDetailPage() {
               </tr>
             </thead>
             <tbody>
-              {provider.addresses.map((addr, idx) => (
+              {(provider.addresses || []).map((addr, idx) => (
                 <tr key={idx}>
-                  <Td>{addr.country}</Td>
+                  <Td>{addr.country || "—"}</Td>
                   <Td>{addr.emirate || "—"}</Td>
                   <Td>
-                    {addr.line1}
+                    {addr.line1 || "—"}
                     {addr.line2 ? `, ${addr.line2}` : ""}
                   </Td>
                   <Td>{addr.addressPurpose || "—"}</Td>
@@ -215,7 +238,7 @@ export default function ProviderDetailPage() {
       {/* Bank details */}
       <section className="space-y-3">
         <h3 className="text-sm font-semibold">Bank Details</h3>
-        {provider.bankDetails.length === 0 ? (
+        {(provider.bankDetails || []).length === 0 ? (
           <p className="text-sm text-slate-500">No bank data.</p>
         ) : (
           <Table>
@@ -229,12 +252,12 @@ export default function ProviderDetailPage() {
               </tr>
             </thead>
             <tbody>
-              {provider.bankDetails.map((b, idx) => (
+              {(provider.bankDetails || []).map((b, idx) => (
                 <tr key={idx}>
-                  <Td>{b.countryCode}</Td>
-                  <Td>{b.bankName}</Td>
-                  <Td>{b.accountNumber}</Td>
-                  <Td>{b.iban}</Td>
+                  <Td>{b.countryCode || "—"}</Td>
+                  <Td>{b.bankName || "—"}</Td>
+                  <Td>{b.accountNumber || "—"}</Td>
+                  <Td>{b.iban || "—"}</Td>
                   <Td>{b.swift || "—"}</Td>
                 </tr>
               ))}
@@ -246,7 +269,7 @@ export default function ProviderDetailPage() {
       {/* Contact persons */}
       <section className="space-y-3">
         <h3 className="text-sm font-semibold">Contact Persons</h3>
-        {provider.contactPersons.length === 0 ? (
+        {(provider.contactPersons || []).length === 0 ? (
           <p className="text-sm text-slate-500">No contact persons.</p>
         ) : (
           <Table>
@@ -259,13 +282,13 @@ export default function ProviderDetailPage() {
               </tr>
             </thead>
             <tbody>
-              {provider.contactPersons.map((c, idx) => (
+              {(provider.contactPersons || []).map((c, idx) => (
                 <tr key={idx}>
                   <Td>
-                    {c.firstName} {c.lastName}
+                    {(c.firstName || "") + " " + (c.lastName || "")}
                   </Td>
-                  <Td>{c.email}</Td>
-                  <Td>{c.mobileNumber}</Td>
+                  <Td>{c.email || "—"}</Td>
+                  <Td>{c.mobileNumber || "—"}</Td>
                   <Td>{c.jobTitle || "—"}</Td>
                 </tr>
               ))}
@@ -325,7 +348,7 @@ export default function ProviderDetailPage() {
         </div>
       </section>
 
-      {/* Admin actions – sirf jab provider approved NA ho */}
+      {/* Admin actions */}
       {!isApproved && (
         <section className="space-y-3 rounded-2xl border bg-white p-4 shadow-sm">
           <h3 className="text-sm font-semibold">Admin Decision</h3>
@@ -367,7 +390,7 @@ export default function ProviderDetailPage() {
         </section>
       )}
 
-      {/* Reject confirmation modal – bhi sirf jab approved na ho */}
+      {/* Reject confirmation modal */}
       {!isApproved && showRejectConfirm && (
         <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40">
           <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-xl">
@@ -377,8 +400,7 @@ export default function ProviderDetailPage() {
             <p className="mt-2 text-sm text-slate-600">
               Are you sure you want to reject this supplier? This action will
               mark their profile as{" "}
-              <span className="font-semibold">rejected</span> and they will not
-              be able to go live unless you approve them again.
+              <span className="font-semibold">rejected</span>.
             </p>
 
             <div className="mt-4 rounded-xl bg-slate-50 p-3 text-xs text-slate-700">
@@ -422,11 +444,7 @@ function StatusBadge({ status }: { status: Provider["status"] }) {
     );
   }
   if (status === "rejected") {
-    return (
-      <span className={`${base} bg-red-50 text-red-700`}>Rejected</span>
-    );
+    return <span className={`${base} bg-red-50 text-red-700`}>Rejected</span>;
   }
-  return (
-    <span className={`${base} bg-amber-50 text-amber-700`}>Pending</span>
-  );
+  return <span className={`${base} bg-amber-50 text-amber-700`}>Pending</span>;
 }

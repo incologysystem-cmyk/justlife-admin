@@ -4,6 +4,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import type { Route } from "next"; // ✅ FIX: Route type import
 import {
   ColumnDef,
   flexRender,
@@ -53,22 +54,22 @@ export default function DataTable<T extends BaseRow>({
   });
 
   // ✅ Helper to decide "View" URL
-  const getRowViewHref = (rowData: any): string | null => {
+  const getRowViewHref = (rowData: any): Route | null => {
     const id: string | undefined = rowData._id || rowData.id || undefined;
     if (!id) return null;
 
     // 1) Explicit viewBasePath from parent (recommended)
     if (viewBasePath) {
-      return `${viewBasePath}/${id}`;
+      return `${viewBasePath}/${id}` as Route; // ✅ FIX: cast to Route
     }
 
     // 2) Fallback heuristics (old behaviour)
     if (pathname.startsWith("/promocodes")) {
-      return `/promocodes/${id}`;
+      return `/promocodes/${id}` as Route; // ✅ FIX
     }
 
     // Default: treat as bookings table
-    return `/bookings/${id}`;
+    return `/bookings/${id}` as Route; // ✅ FIX
   };
 
   return (
@@ -100,10 +101,7 @@ export default function DataTable<T extends BaseRow>({
                     <div className="flex items-center gap-1">
                       {flexRender(h.column.columnDef.header, h.getContext())}
                       <span className="text-[10px] text-slate-400">
-                        {({
-                          asc: "↑",
-                          desc: "↓",
-                        } as Record<string, string>)[
+                        {({ asc: "↑", desc: "↓" } as Record<string, string>)[
                           h.column.getIsSorted() as string
                         ] ?? null}
                       </span>
@@ -139,7 +137,7 @@ export default function DataTable<T extends BaseRow>({
                   <td className="px-3 py-2 text-xs">
                     {href ? (
                       <Link
-                        href={href}
+                        href={href} // ✅ now Route type
                         className="px-3 py-1 rounded border border-slate-200 text-slate-600 text-xs hover:bg-slate-50 transition"
                       >
                         View

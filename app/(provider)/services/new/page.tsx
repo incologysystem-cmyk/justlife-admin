@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { serverFetch } from "@/lib/serverFetch";
 import ServiceFormAdapter from "@/app/components/admin/ServiceFormAdapter";
 import type { Category } from "@/types/catalog";
+import type { Route } from "next";
 
 function slugify(s: string) {
   return String(s)
@@ -14,7 +15,9 @@ function slugify(s: string) {
 }
 
 export default async function NewServicePage() {
-  if (!requireAdmin()) redirect("provider/login?next=/admin/services/new");
+  // ✅ leading slash + typed-route cast
+  if (!requireAdmin())
+    redirect(("/provider/login?next=/admin/services/new" as unknown) as Route);
 
   const res = await serverFetch<{ success?: boolean; data?: any[] }>(
     "/catalog/categories?active=false",

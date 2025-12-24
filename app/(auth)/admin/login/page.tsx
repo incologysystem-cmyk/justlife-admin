@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
+import type { Route } from "next"; // ✅ typed route
 import { toast } from "sonner";
 import OtpInput from "@/app/components/auth/OtpInput";
 
@@ -19,6 +20,13 @@ type LoginResponse = {
   message?: string;
   codeLength?: number;
 };
+
+function sanitizeAdminNext(next: string) {
+  // ✅ only allow internal /admin routes to avoid open-redirect
+  if (!next) return "/admin";
+  if (next.startsWith("/admin")) return next;
+  return "/admin";
+}
 
 export default function AdminLoginPage() {
   const router = useRouter();
@@ -79,10 +87,8 @@ export default function AdminLoginPage() {
         body: JSON.stringify({ phone: phone.trim() }),
       });
 
-      const j: LoginResponse & {
-        requestId?: string;
-        devCode?: string;
-      } = await r.json().catch(() => ({} as any));
+      const j: LoginResponse & { requestId?: string; devCode?: string } =
+        await r.json().catch(() => ({} as any));
 
       if (!r.ok || j.error) {
         throw new Error(j.error || j.message || "Failed to send OTP");
@@ -99,9 +105,7 @@ export default function AdminLoginPage() {
       setStep("otp");
       startCooldown(30);
 
-      if (j.devCode) {
-        toast.info(`Dev OTP: ${j.devCode}`);
-      }
+      if (j.devCode) toast.info(`Dev OTP: ${j.devCode}`);
       toast.success("OTP sent to your WhatsApp");
     } catch (e: any) {
       toast.error(e?.message || "Failed to send OTP");
@@ -110,52 +114,51 @@ export default function AdminLoginPage() {
     }
   }
 
-// STEP 2: verify OTP and ensure role === admin
-async function verifyOtp() {
-  if (!requestId) return toast.error("Missing requestId. Please resend OTP.");
-  if (code.length !== codeLen) {
-    return toast.error(`Enter ${codeLen}-digit code`);
-  }
-
-  setLoading(true);
-  try {
-    const r = await fetch("/api/auth/otp/verify", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      credentials: "include",
-      body: JSON.stringify({ requestId, code }),
-    });
-
-    const data: LoginResponse = await r.json().catch(() => ({} as any));
-
-    if (!r.ok || data.error) {
-      throw new Error(data.error || data.message || "Invalid code");
+  // STEP 2: verify OTP and ensure role === admin
+  async function verifyOtp() {
+    if (!requestId) return toast.error("Missing requestId. Please resend OTP.");
+    if (code.length !== codeLen) {
+      return toast.error(`Enter ${codeLen}-digit code`);
     }
 
-    if (!data.user || data.user.role !== "admin") {
-      throw new Error("You are not allowed to access the admin area.");
-    }
-
-    toast.success("Logged in as admin");
-
-    // 👇 Yahan se redirect ko sanitize kar rahe hain
-    const target =
-      next && next.startsWith("/admin") ? next : "/admin";
-
-    console.log("ADMIN LOGIN redirecting to:", target);
-
+    setLoading(true);
     try {
-      router.push(target);
-    } catch {
-      window.location.href = target;
-    }
-  } catch (e: any) {
-    toast.error(e?.message || "Verification failed");
-  } finally {
-    setLoading(false);
-  }
-}
+      const r = await fetch("/api/auth/otp/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ requestId, code }),
+      });
 
+      const data: LoginResponse = await r.json().catch(() => ({} as any));
+
+      if (!r.ok || data.error) {
+        throw new Error(data.error || data.message || "Invalid code");
+      }
+
+      if (!data.user || data.user.role !== "admin") {
+        throw new Error("You are not allowed to access the admin area.");
+      }
+
+      toast.success("Logged in as admin");
+
+      // ✅ sanitize redirect
+      const target = sanitizeAdminNext(next);
+
+      console.log("ADMIN LOGIN redirecting to:", target);
+
+      // ✅ Typed routes fix: cast after sanitization
+      try {
+        router.push(target as Route);
+      } catch {
+        window.location.href = target;
+      }
+    } catch (e: any) {
+      toast.error(e?.message || "Verification failed");
+    } finally {
+      setLoading(false);
+    }
+  }
 
   return (
     <div className="min-h-screen flex">
@@ -163,9 +166,7 @@ async function verifyOtp() {
       <div className="w-full md:w-1/2 flex items-center justify-center bg-gray-50 px-8 py-10 text-gray-800">
         <div className="w-full max-w-md space-y-8">
           <div className="space-y-1">
-            <h1 className="text-2xl font-bold text-gray-800">
-              Admin Sign in
-            </h1>
+            <h1 className="text-2xl font-bold text-gray-800">Admin Sign in</h1>
             <p className="text-sm text-gray-700">
               Login with your registered admin phone number to access the
               dashboard.

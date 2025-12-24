@@ -24,7 +24,13 @@ export type AddonPayload = {
 type AddAddonModalProps = {
   open: boolean;
   onClose: () => void;
-  onSave: (data: AddonPayload) => Promise<void> | void;
+
+  /**
+   * ✅ Updated:
+   * return true  => close + reset modal
+   * return false => keep modal open (show error)
+   */
+  onSave: (data: AddonPayload) => Promise<boolean>;
 
   categories?: Category[];
   defaultCategoryId?: string;
@@ -94,14 +100,12 @@ async function fetchProviderCategories(): Promise<Category[]> {
 
   const json = await res.json().catch(() => ({}));
 
-  // 🔎 Debug (remove later if you want)
   console.log("[provider/categories] raw response:", json);
 
   if (!res.ok || json?.ok === false) {
     throw new Error(json?.message || json?.error || `Failed to fetch categories (HTTP ${res.status})`);
   }
 
-  // ✅ Accept ALL common shapes
   const list: any[] =
     (Array.isArray(json?.items) && json.items) ||
     (Array.isArray(json?.categories) && json.categories) ||
@@ -117,8 +121,8 @@ async function fetchProviderCategories(): Promise<Category[]> {
 
       return {
         ...(c as any),
-        id,          // keep both
-        _id: id,      // important for dropdown + backend
+        id,
+        _id: id,
         name,
         slug: c?.slug,
       } as any;
@@ -170,7 +174,6 @@ export default function AddAddonModal({
       setSubmitError(null);
       setCatsError(null);
 
-      // always refresh once when modal opens (so it stays up-to-date)
       setCatsLoading(true);
       try {
         const list = await fetchProviderCategories();
@@ -192,15 +195,12 @@ export default function AddAddonModal({
     if (!open) return;
 
     setForm((prev) => {
-      // keep current selection if valid
       if (prev.categoryId && isObjectId(prev.categoryId)) return prev;
 
-      // prefer defaultCategoryId if valid
       if (defaultCategoryId && isObjectId(defaultCategoryId)) {
         return { ...prev, categoryId: defaultCategoryId };
       }
 
-      // else pick first category
       const first = cats?.[0] as any;
       const firstId = String(first?._id ?? first?.id ?? "");
       return isObjectId(firstId) ? { ...prev, categoryId: firstId } : prev;
@@ -271,11 +271,17 @@ export default function AddAddonModal({
         imagePreview: form.imagePreview,
       };
 
-      // ✅ only close on SUCCESS
-      await onSave(payload);
+      // ✅ Let parent decide if success
+      const ok = await onSave(payload);
 
-      setForm((prev) => ({ ...initialFormState, categoryId: prev.categoryId }));
-      onClose();
+      if (ok) {
+        // reset then close
+        setForm((prev) => ({ ...initialFormState, categoryId: prev.categoryId }));
+        onClose();
+      } else {
+        // keep open, show message if parent didn't
+        setSubmitError((prev) => prev || "Failed to create add-on.");
+      }
     } catch (err: any) {
       console.error("[AddAddonModal] submit failed:", err);
       setSubmitError(err?.message || "Failed to create add-on.");
@@ -395,11 +401,7 @@ export default function AddAddonModal({
               <label className="text-xs font-medium">Add-on Image</label>
               <input type="file" accept="image/*" onChange={handleImageChange} className="mt-1" />
               {form.imagePreview && (
-                <img
-                  src={form.imagePreview}
-                  alt="preview"
-                  className="mt-2 h-16 w-16 object-cover rounded border"
-                />
+                <img src={form.imagePreview} alt="preview" className="mt-2 h-16 w-16 object-cover rounded border" />
               )}
             </div>
 
