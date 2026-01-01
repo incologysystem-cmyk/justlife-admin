@@ -29,7 +29,7 @@ export function middleware(req: NextRequest) {
 
     if (!providerToken) {
       const url = req.nextUrl.clone();
-      url.pathname = "/login"; // ya "/provider/login" agar tum wahan rakhna chaho
+      url.pathname = "provider/login"; // ya "/provider/login" agar tum wahan rakhna chaho
       url.searchParams.set("next", pathname);
       return NextResponse.redirect(url);
     }

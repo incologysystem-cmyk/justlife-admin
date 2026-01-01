@@ -3,11 +3,11 @@
 import { useState, useEffect, useRef } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import type { Route } from "next"; // ✅ typed route
+import type { Route } from "next";
 import { toast } from "sonner";
 import OtpInput from "@/app/components/auth/OtpInput";
 
-const DEFAULT_CODE_LEN = 6;
+const OTP_LENGTH = 4;
 
 type LoginResponse = {
   success?: boolean;
@@ -18,11 +18,9 @@ type LoginResponse = {
   token?: string;
   error?: string;
   message?: string;
-  codeLength?: number;
 };
 
 function sanitizeAdminNext(next: string) {
-  // ✅ only allow internal /admin routes to avoid open-redirect
   if (!next) return "/admin";
   if (next.startsWith("/admin")) return next;
   return "/admin";
@@ -34,13 +32,12 @@ export default function AdminLoginPage() {
   const [step, setStep] = useState<"phone" | "otp">("phone");
   const [phone, setPhone] = useState("");
   const [code, setCode] = useState("");
-  const [codeLen, setCodeLen] = useState<number>(DEFAULT_CODE_LEN);
   const [requestId, setRequestId] = useState<string | null>(null);
   const [cooldown, setCooldown] = useState(0);
   const [loading, setLoading] = useState(false);
   const [next, setNext] = useState<string>("/admin");
 
-  // read ?next=... from URL on client (fallback -> /admin)
+  // read ?next=...
   useEffect(() => {
     if (typeof window === "undefined") return;
     try {
@@ -51,7 +48,7 @@ export default function AdminLoginPage() {
     }
   }, []);
 
-  // cooldown timer for resend
+  // cooldown timer
   const timerRef = useRef<number | null>(null);
   useEffect(() => {
     return () => {
@@ -62,6 +59,7 @@ export default function AdminLoginPage() {
   function startCooldown(seconds = 30) {
     setCooldown(seconds);
     if (timerRef.current) window.clearInterval(timerRef.current);
+
     timerRef.current = window.setInterval(() => {
       setCooldown((c) => {
         if (c <= 1) {
@@ -74,7 +72,7 @@ export default function AdminLoginPage() {
     }, 1000);
   }
 
-  // STEP 1: start OTP for admin phone
+  // STEP 1 — Send OTP
   async function startOtp() {
     if (!phone.trim()) return toast.error("Enter phone number");
 
@@ -87,26 +85,23 @@ export default function AdminLoginPage() {
         body: JSON.stringify({ phone: phone.trim() }),
       });
 
-      const j: LoginResponse & { requestId?: string; devCode?: string } =
-        await r.json().catch(() => ({} as any));
+      const j: any = await r.json().catch(() => ({}));
 
       if (!r.ok || j.error) {
         throw new Error(j.error || j.message || "Failed to send OTP");
       }
 
       if (!j.requestId) {
-        throw new Error("requestId missing in /otp/start response");
+        throw new Error("requestId missing");
       }
 
       setRequestId(j.requestId);
       setCode("");
-      setCodeLen(j.codeLength || DEFAULT_CODE_LEN);
-
       setStep("otp");
       startCooldown(30);
 
       if (j.devCode) toast.info(`Dev OTP: ${j.devCode}`);
-      toast.success("OTP sent to your WhatsApp");
+      toast.success("4-digit OTP sent to your WhatsApp");
     } catch (e: any) {
       toast.error(e?.message || "Failed to send OTP");
     } finally {
@@ -114,11 +109,11 @@ export default function AdminLoginPage() {
     }
   }
 
-  // STEP 2: verify OTP and ensure role === admin
+  // STEP 2 — Verify OTP
   async function verifyOtp() {
-    if (!requestId) return toast.error("Missing requestId. Please resend OTP.");
-    if (code.length !== codeLen) {
-      return toast.error(`Enter ${codeLen}-digit code`);
+    if (!requestId) return toast.error("Please resend OTP");
+    if (code.length !== OTP_LENGTH) {
+      return toast.error(`Enter ${OTP_LENGTH}-digit code`);
     }
 
     setLoading(true);
@@ -133,21 +128,17 @@ export default function AdminLoginPage() {
       const data: LoginResponse = await r.json().catch(() => ({} as any));
 
       if (!r.ok || data.error) {
-        throw new Error(data.error || data.message || "Invalid code");
+        throw new Error(data.error || data.message || "Invalid OTP");
       }
 
       if (!data.user || data.user.role !== "admin") {
-        throw new Error("You are not allowed to access the admin area.");
+        throw new Error("Admin access only");
       }
 
       toast.success("Logged in as admin");
 
-      // ✅ sanitize redirect
       const target = sanitizeAdminNext(next);
 
-      console.log("ADMIN LOGIN redirecting to:", target);
-
-      // ✅ Typed routes fix: cast after sanitization
       try {
         router.push(target as Route);
       } catch {
@@ -162,52 +153,55 @@ export default function AdminLoginPage() {
 
   return (
     <div className="min-h-screen flex">
-      {/* LEFT 50% — ADMIN LOGIN FORM (OTP based) */}
+      {/* LEFT */}
       <div className="w-full md:w-1/2 flex items-center justify-center bg-gray-50 px-8 py-10 text-gray-800">
         <div className="w-full max-w-md space-y-8">
-          <div className="space-y-1">
-            <h1 className="text-2xl font-bold text-gray-800">Admin Sign in</h1>
-            <p className="text-sm text-gray-700">
-              Login with your registered admin phone number to access the
-              dashboard.
+          <div>
+            <h1 className="text-2xl font-bold">Admin Sign in</h1>
+            <p className="text-sm mt-1">
+              Login with your admin WhatsApp number
             </p>
           </div>
 
           {step === "phone" ? (
             <div className="space-y-4">
-              <div className="space-y-2">
-                <label className="text-xs font-medium text-gray-700">
+              <div>
+                <label className="text-xs font-medium">
                   Admin phone (WhatsApp)
                 </label>
                 <input
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
                   placeholder="+971501234567"
-                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-800 focus:ring-2 focus:ring-emerald-600 focus:border-emerald-600 outline-none"
+                  className="w-full mt-1 rounded-md border px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-600 outline-none"
                 />
               </div>
 
               <button
                 onClick={startOtp}
                 disabled={loading || !phone.trim()}
-                className="w-full py-2 rounded-md bg-emerald-600 text-white font-medium shadow disabled:opacity-50"
+                className="w-full py-2 rounded-md bg-emerald-600 text-white font-medium disabled:opacity-50"
               >
-                {loading ? "Sending..." : "Send OTP"}
+                {loading ? "Sending..." : "Send 4-Digit OTP"}
               </button>
             </div>
           ) : (
             <div className="space-y-4">
-              <div className="space-y-2">
-                <label className="text-xs font-medium text-gray-700">
-                  Enter {codeLen}-digit code
+              <div>
+                <label className="text-xs font-medium">
+                  Enter 4-digit code
                 </label>
-                <OtpInput value={code} onChange={setCode} length={codeLen} />
+                <OtpInput
+                  value={code}
+                  onChange={setCode}
+                  length={OTP_LENGTH}
+                />
               </div>
 
               <button
                 onClick={verifyOtp}
-                disabled={loading || code.length !== codeLen}
-                className="w-full py-2 rounded-md bg-emerald-600 text-white font-medium shadow disabled:opacity-50"
+                disabled={loading || code.length !== OTP_LENGTH}
+                className="w-full py-2 rounded-md bg-emerald-600 text-white font-medium disabled:opacity-50"
               >
                 {loading ? "Verifying..." : "Verify & Continue"}
               </button>
@@ -215,45 +209,36 @@ export default function AdminLoginPage() {
               <button
                 onClick={() => cooldown === 0 && startOtp()}
                 disabled={cooldown > 0 || loading}
-                className="w-full py-2 rounded-md border border-gray-300 text-sm text-gray-800 disabled:opacity-50"
+                className="w-full py-2 rounded-md border text-sm disabled:opacity-50"
               >
                 {cooldown > 0 ? `Resend in ${cooldown}s` : "Resend Code"}
               </button>
 
               <button
                 onClick={() => setStep("phone")}
-                className="w-full py-2 text-xs text-gray-600 underline"
+                className="w-full text-xs underline text-gray-600"
               >
                 Change phone
               </button>
             </div>
           )}
 
-          <p className="text-xs text-gray-700">
-            This area is restricted to Credible Management administrators only.
+          <p className="text-xs text-gray-600">
+            Restricted area — Admin access only
           </p>
         </div>
       </div>
 
-      {/* RIGHT 50% — ADMIN VISUAL */}
+      {/* RIGHT */}
       <div className="hidden md:block w-1/2 relative">
         <Image
           src="/png-clipart-user-computer-icons-product-manuals-system-administrator-behaviors-blue-text-thumbnail.png"
-          alt="Admin dashboard overview"
+          alt="Admin dashboard"
           fill
           className="object-cover"
           priority
         />
-        <div className="absolute inset-0 bg-black/35" />
-        <div className="absolute bottom-6 left-6 right-6 bg-white/90 p-4 rounded-xl shadow-lg text-gray-800">
-          <p className="text-base font-semibold">
-            Monitor your entire service platform in one place
-          </p>
-          <p className="text-xs mt-1">
-            Track provider approvals, live jobs, payments and platform
-            performance from the Credible Management admin dashboard.
-          </p>
-        </div>
+        <div className="absolute inset-0 bg-black/40" />
       </div>
     </div>
   );
