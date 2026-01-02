@@ -716,36 +716,3 @@ export async function fetchCustomers(): Promise<Customer[]> {
 // ----------------------
 // Earnings
 // ----------------------
-export async function fetchEarnings(): Promise<{
-  today: number;
-  thisWeek: number;
-  thisMonth: number;
-  series: { date: string; amount: number }[];
-}> {
-  await sleep(120);
-
-  const now = new Date();
-  const series: { date: string; amount: number }[] = [];
-  let thisWeek = 0;
-  let thisMonth = 0;
-
-  for (let i = 29; i >= 0; i--) {
-    const d = new Date(now);
-    d.setDate(now.getDate() - i);
-    const base = 700 + Math.round(Math.random() * 600); // 700–1300 / day
-    series.push({ date: d.toLocaleDateString(), amount: base });
-
-    // rough weekly & monthly buckets
-    if (i <= now.getDay()) thisWeek += base;
-    if (d.getMonth() === now.getMonth()) thisMonth += base;
-  }
-
-  const today = series[series.length - 1]!.amount;
-
-  return {
-    today,
-    thisWeek,
-    thisMonth,
-    series,
-  };
-}
