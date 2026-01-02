@@ -1,29 +1,93 @@
-import { NextResponse } from "next/server";
+// app/api/provider/me/route.ts
+import { NextRequest, NextResponse } from "next/server";
+import { cookies } from "next/headers";
+import { serverFetch } from "@/lib/serverFetch";
 
-const API_BASE = process.env.API_BASE || process.env.NEXT_PUBLIC_API_BASE;
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
-export async function GET(req: Request) {
-  const r = await fetch(`${API_BASE}/api/provider/me`, {
-    headers: { cookie: req.headers.get("cookie") || "" },
-    cache: "no-store",
-  });
-
-  const text = await r.text();
-  return new NextResponse(text, { status: r.status, headers: { "Content-Type": "application/json" } });
+function base() {
+  const b =
+    process.env.API_BASE?.replace(/\/$/, "") ||
+    process.env.NEXT_PUBLIC_API_BASE?.replace(/\/$/, "");
+  if (!b) throw new Error("API_BASE (or NEXT_PUBLIC_API_BASE) is not set");
+  return b;
 }
 
-export async function PATCH(req: Request) {
-  const body = await req.text();
+async function authHeaders(): Promise<HeadersInit> {
+  const cookieStore = await cookies();
+  const token =
+    cookieStore.get("accessToken")?.value ||
+    cookieStore.get("token")?.value ||
+    cookieStore.get("cm_admin_token")?.value ||
+    null;
 
-  const r = await fetch(`${API_BASE}/api/provider/me`, {
-    method: "PATCH",
-    headers: {
-      "Content-Type": "application/json",
-      cookie: req.headers.get("cookie") || "",
-    },
-    body,
-  });
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
 
-  const text = await r.text();
-  return new NextResponse(text, { status: r.status, headers: { "Content-Type": "application/json" } });
+export async function GET(req: NextRequest) {
+  try {
+    const headers = await authHeaders();
+
+    const out = await serverFetch<any>(`${base()}/api/providers/me`, {
+      method: "GET",
+      headers: {
+        ...headers,
+        Accept: "application/json",
+      },
+    });
+
+    return NextResponse.json(out, { status: 200 });
+  } catch (e: any) {
+    console.error("GET /api/provider/me error:", e?.message);
+    console.dir(e?.body, { depth: 20 });
+
+    return NextResponse.json(
+      {
+        ok: false,
+        message: e?.message || "Failed to fetch provider profile",
+        details: e?.body ?? null,
+      },
+      { status: e?.status ?? 500 }
+    );
+  }
+}
+
+export async function PATCH(req: NextRequest) {
+  try {
+    const body = await req.json();
+    const headers = await authHeaders();
+
+    const out = await serverFetch<any>(`${base()}/api/providers/me`, {
+      method: "PATCH",
+      headers: {
+        ...headers,
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify(body),
+    });
+
+    return NextResponse.json(out, { status: 200 });
+  } catch (e: any) {
+    console.error("PATCH /api/provider/me error:", e?.message);
+    console.dir(e?.body, { depth: 20 });
+
+    return NextResponse.json(
+      {
+        ok: false,
+        message: e?.message || "Failed to update provider profile",
+        details: e?.body ?? null,
+      },
+      { status: e?.status ?? 500 }
+    );
+  }
+}
+
+export async function OPTIONS() {
+  return NextResponse.json({ ok: true });
+}
+
+export async function HEAD() {
+  return NextResponse.json({ ok: true });
 }

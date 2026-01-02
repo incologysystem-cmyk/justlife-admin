@@ -16,9 +16,28 @@ type Notif = {
   href?: string;
 };
 
+type ProviderMeResponse = {
+  success?: boolean;
+  provider?: {
+    _id?: string;
+    nameOfSupplier?: string;
+    legalName?: string;
+    contactPersons?: Array<{
+      firstName?: string;
+      lastName?: string;
+      email?: string;
+      mobileNumber?: string;
+    }>;
+  };
+  message?: string;
+  error?: string;
+};
+
 function timeAgo(iso?: string) {
   if (!iso) return "";
-  const s = Math.max(1, Math.floor((Date.now() - new Date(iso).getTime()) / 1000));
+  const t = new Date(iso).getTime();
+  if (Number.isNaN(t)) return "";
+  const s = Math.max(1, Math.floor((Date.now() - t) / 1000));
   if (s < 60) return `${s}s ago`;
   const m = Math.floor(s / 60);
   if (m < 60) return `${m}m ago`;
@@ -27,16 +46,37 @@ function timeAgo(iso?: string) {
   return `${Math.floor(h / 24)}d ago`;
 }
 
-function normalizeId(v: any) {
+function normalizeId(v: unknown) {
   const id = String(v ?? "").trim();
   if (!id || id === "undefined" || id === "null") return "";
   return id;
 }
 
-function normalizeNotif(n: any): Notif | null {
-  const _id = normalizeId(n?._id) || normalizeId(n?.id);
+function normalizeNotif(n: unknown): Notif | null {
+  if (!n || typeof n !== "object") return null;
+  const obj = n as Record<string, unknown>;
+  const _id = normalizeId(obj._id) || normalizeId(obj.id);
   if (!_id) return null;
-  return { ...n, _id };
+
+  return {
+    _id,
+    title: typeof obj.title === "string" ? obj.title : undefined,
+    body: typeof obj.body === "string" ? obj.body : undefined,
+    message: typeof obj.message === "string" ? obj.message : undefined,
+    createdAt: typeof obj.createdAt === "string" ? obj.createdAt : undefined,
+    readAt:
+      obj.readAt === null
+        ? null
+        : typeof obj.readAt === "string"
+        ? obj.readAt
+        : undefined,
+    href: typeof obj.href === "string" ? obj.href : undefined,
+  };
+}
+
+function firstLetter(name?: string) {
+  const v = String(name ?? "").trim();
+  return v ? v[0]!.toUpperCase() : "P";
 }
 
 export function Topbar() {
@@ -47,6 +87,9 @@ export function Topbar() {
   const [items, setItems] = useState<Notif[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<Notif | null>(null);
+
+  // provider initials
+  const [providerName, setProviderName] = useState<string>("");
 
   const btnRef = useRef<HTMLButtonElement | null>(null);
   const wrapRef = useRef<HTMLDivElement | null>(null);
@@ -59,6 +102,7 @@ export function Topbar() {
   });
 
   const unreadCount = useMemo(() => items.filter((n) => !n.readAt).length, [items]);
+  const profileLetter = useMemo(() => firstLetter(providerName), [providerName]);
 
   // ✅ compute dropdown position under bell
   function computePos() {
@@ -69,15 +113,45 @@ export function Topbar() {
     const dropdownWidth = 420;
     const gap = 8;
 
-    // right align to button
     let left = r.right - dropdownWidth;
     const top = r.bottom + gap;
 
-    // clamp to viewport
     left = Math.max(8, Math.min(left, window.innerWidth - dropdownWidth - 8));
-
     setPos({ top, left, width: dropdownWidth });
   }
+
+  // ✅ fetch provider name for profile badge
+  async function fetchProviderName() {
+    try {
+      const r = await fetch("/api/provider/me", {
+        credentials: "include",
+        cache: "no-store",
+      });
+      const j = (await r.json().catch(() => ({}))) as ProviderMeResponse;
+
+      if (!r.ok) return;
+
+      const p = j?.provider;
+      const name =
+        p?.nameOfSupplier ||
+        p?.legalName ||
+        (() => {
+          const c = p?.contactPersons?.[0];
+          const full = `${c?.firstName || ""} ${c?.lastName || ""}`.trim();
+          return full;
+        })() ||
+        "";
+
+      setProviderName(String(name || "").trim());
+    } catch {
+      // silent
+    }
+  }
+
+  // load provider name once (and whenever you want)
+  useEffect(() => {
+    fetchProviderName();
+  }, []);
 
   // ✅ close on outside click (but NOT when modal open)
   useEffect(() => {
@@ -117,6 +191,7 @@ export function Topbar() {
       window.removeEventListener("resize", onResize);
       window.removeEventListener("scroll", onResize, true);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   async function fetchNotifs() {
@@ -134,13 +209,14 @@ export function Topbar() {
         signal: ac.signal,
       });
 
-      const j = await r.json().catch(() => ({}));
+      const j = (await r.json().catch(() => ({}))) as { items?: unknown[]; error?: string; message?: string };
       if (!r.ok) throw new Error(j?.error || j?.message || "Failed to load notifications");
 
       const raw = Array.isArray(j.items) ? j.items : [];
-      setItems(raw.map(normalizeNotif).filter(Boolean) as Notif[]);
-    } catch (e: any) {
-      if (e?.name !== "AbortError") setError(e?.message || "Failed to load notifications");
+      setItems(raw.map(normalizeNotif).filter((x): x is Notif => Boolean(x)));
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "Failed to load notifications";
+      if (!(e instanceof DOMException && e.name === "AbortError")) setError(msg);
     } finally {
       setLoading(false);
     }
@@ -155,7 +231,6 @@ export function Topbar() {
   }, [open]);
 
   async function markAllRead() {
-    // optimistic
     setItems((p) => p.map((n) => ({ ...n, readAt: n.readAt || new Date().toISOString() })));
     try {
       await fetch("/api/provider/notifications/read-all", {
@@ -167,11 +242,10 @@ export function Topbar() {
     }
   }
 
-  async function markOneRead(idLike: any) {
+  async function markOneRead(idLike: unknown) {
     const id = normalizeId(idLike);
     if (!id) return;
 
-    // optimistic
     setItems((p) =>
       p.map((n) => (n._id === id ? { ...n, readAt: n.readAt || new Date().toISOString() } : n))
     );
@@ -187,9 +261,7 @@ export function Topbar() {
   }
 
   function openNotif(n: Notif) {
-    const id = n._id;
-    // mark read + open modal
-    markOneRead(id);
+    markOneRead(n._id);
     setSelected({ ...n, readAt: n.readAt || new Date().toISOString() });
     setOpen(false);
   }
@@ -266,12 +338,11 @@ export function Topbar() {
                     ) : (
                       <ul className="divide-y divide-black/5 dark:divide-white/10">
                         {items.map((n) => {
-                          const id = n._id;
                           const isUnread = !n.readAt;
                           const shortBody = (n.body || n.message || "").trim();
 
                           return (
-                            <li key={id} className="px-4 py-3">
+                            <li key={n._id} className="px-4 py-3">
                               <div className="flex items-start justify-between gap-3">
                                 <button
                                   type="button"
@@ -296,7 +367,7 @@ export function Topbar() {
                                 <div className="flex items-center gap-2 shrink-0">
                                   <button
                                     type="button"
-                                    onClick={() => markOneRead(id)}
+                                    onClick={() => markOneRead(n._id)}
                                     className="px-2 py-1 text-[11px] rounded-md border hover:bg-card disabled:opacity-50"
                                     disabled={!isUnread}
                                   >
@@ -327,14 +398,16 @@ export function Topbar() {
             )}
           </div>
 
-          {/* ✅ Profile button -> /provider/profile */}
+          {/* ✅ Profile button shows provider first alphabet */}
           <button
             type="button"
             onClick={onProfileClick}
-            className="w-8 h-8 rounded-full bg-card border hover:opacity-90"
+            className="w-8 h-8 rounded-full bg-card border hover:opacity-90 flex items-center justify-center"
             aria-label="Profile"
-            title="Profile"
-          />
+            title={providerName ? `Profile: ${providerName}` : "Profile"}
+          >
+            <span className="text-xs font-semibold opacity-80">{profileLetter}</span>
+          </button>
         </div>
       </header>
 
