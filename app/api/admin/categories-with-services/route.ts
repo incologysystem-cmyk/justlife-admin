@@ -60,7 +60,7 @@ export async function GET(req: NextRequest) {
     }
 
     // 🔗 Direct call to Express backend (NO serverFetch here)
-    const url = `${BASE}/api/category/catalog/categories-with-services`;
+    const url = `${BASE}/api/category/admin/categories-with-services`;
     const res = await fetch(url, {
       method: "GET",
       headers,
