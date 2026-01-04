@@ -4,7 +4,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import type { Route } from "next"; // ✅ FIX: Route type import
+import type { Route } from "next";
 import {
   ColumnDef,
   flexRender,
@@ -20,22 +20,21 @@ type BaseRow = Record<string, any> & { _id?: string; id?: string };
 export default function DataTable<T extends BaseRow>({
   columns,
   data,
-  viewBasePath, // ✅ NEW
+  viewBasePath,
+  showActionColumn = true, // ✅ NEW (default: true)
 }: {
   columns: ColumnDef<T, any>[];
   data: T[];
   viewBasePath?: string;
+  showActionColumn?: boolean; // ✅ NEW
 }) {
   const [sorting, setSorting] = React.useState<SortingState>([]);
   const [query, setQuery] = React.useState("");
   const pathname = usePathname();
 
-  // 🔍 Client-side Search Filter
   const filteredData = React.useMemo(() => {
     if (!query.trim()) return data;
-
     const q = query.toLowerCase();
-
     return data.filter((row) =>
       Object.values(row).some((value) =>
         String(value || "").toLowerCase().includes(q)
@@ -53,28 +52,19 @@ export default function DataTable<T extends BaseRow>({
     getPaginationRowModel: getPaginationRowModel(),
   });
 
-  // ✅ Helper to decide "View" URL
   const getRowViewHref = (rowData: any): Route | null => {
     const id: string | undefined = rowData._id || rowData.id || undefined;
     if (!id) return null;
 
-    // 1) Explicit viewBasePath from parent (recommended)
-    if (viewBasePath) {
-      return `${viewBasePath}/${id}` as Route; // ✅ FIX: cast to Route
-    }
+    if (viewBasePath) return `${viewBasePath}/${id}` as Route;
 
-    // 2) Fallback heuristics (old behaviour)
-    if (pathname.startsWith("/promocodes")) {
-      return `/promocodes/${id}` as Route; // ✅ FIX
-    }
+    if (pathname.startsWith("/promocodes")) return `/promocodes/${id}` as Route;
 
-    // Default: treat as bookings table
-    return `/bookings/${id}` as Route; // ✅ FIX
+    return `/bookings/${id}` as Route;
   };
 
   return (
     <div className="space-y-3">
-      {/* 🔍 Search Bar */}
       <div className="flex justify-between items-center">
         <input
           type="text"
@@ -86,7 +76,6 @@ export default function DataTable<T extends BaseRow>({
         />
       </div>
 
-      {/* Table */}
       <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
         <table className="w-full text-sm">
           <thead className="bg-slate-50">
@@ -109,10 +98,12 @@ export default function DataTable<T extends BaseRow>({
                   </th>
                 ))}
 
-                {/* Extra column header for Action */}
-                <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                  Action
-                </th>
+                {/* ✅ only when enabled */}
+                {showActionColumn ? (
+                  <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                    Action
+                  </th>
+                ) : null}
               </tr>
             ))}
           </thead>
@@ -133,33 +124,34 @@ export default function DataTable<T extends BaseRow>({
                     </td>
                   ))}
 
-                  {/* View Button */}
-                  <td className="px-3 py-2 text-xs">
-                    {href ? (
-                      <Link
-                        href={href} // ✅ now Route type
-                        className="px-3 py-1 rounded border border-slate-200 text-slate-600 text-xs hover:bg-slate-50 transition"
-                      >
-                        View
-                      </Link>
-                    ) : (
-                      <button
-                        className="px-3 py-1 rounded border border-slate-100 text-slate-300 text-xs cursor-not-allowed"
-                        disabled
-                      >
-                        No ID
-                      </button>
-                    )}
-                  </td>
+                  {/* ✅ only when enabled */}
+                  {showActionColumn ? (
+                    <td className="px-3 py-2 text-xs">
+                      {href ? (
+                        <Link
+                          href={href}
+                          className="px-3 py-1 rounded border border-slate-200 text-slate-600 text-xs hover:bg-slate-50 transition"
+                        >
+                          View
+                        </Link>
+                      ) : (
+                        <button
+                          className="px-3 py-1 rounded border border-slate-100 text-slate-300 text-xs cursor-not-allowed"
+                          disabled
+                        >
+                          No ID
+                        </button>
+                      )}
+                    </td>
+                  ) : null}
                 </tr>
               );
             })}
 
-            {/* Empty State */}
             {table.getRowModel().rows.length === 0 && (
               <tr>
                 <td
-                  colSpan={table.getAllColumns().length + 1}
+                  colSpan={table.getAllColumns().length + (showActionColumn ? 1 : 0)}
                   className="px-3 py-6 text-center text-xs text-slate-400"
                 >
                   No data to display.
@@ -170,7 +162,6 @@ export default function DataTable<T extends BaseRow>({
         </table>
       </div>
 
-      {/* Pagination */}
       <div className="flex items-center justify-between text-xs text-slate-500">
         <div>
           Rows:{" "}
