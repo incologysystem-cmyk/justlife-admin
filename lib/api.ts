@@ -477,9 +477,7 @@ export async function createService(
 
 
 
-export async function fetchCategoriesWithServices(): Promise<
-  CategoryWithServices[]
-> {
+export async function fetchCategoriesWithServices(): Promise<CategoryWithServices[]> {
   const res = await fetch("/api/admin/categories-with-services", {
     method: "GET",
     headers: { Accept: "application/json" },
@@ -490,29 +488,60 @@ export async function fetchCategoriesWithServices(): Promise<
   const data = await res.json();
   const rows = Array.isArray(data?.data) ? data.data : [];
 
+  const pickFirstImage = (s: any): string | undefined => {
+    // 1) direct image
+    const direct = typeof s?.image === "string" ? s.image.trim() : "";
+    if (direct) return direct;
+
+    // 2) images array
+    if (Array.isArray(s?.images) && s.images.length) {
+      const img0 = String(s.images[0] ?? "").trim();
+      if (img0) return img0;
+    }
+
+    // 3) sometimes field names differ
+    if (Array.isArray(s?.imageUrls) && s.imageUrls.length) {
+      const img0 = String(s.imageUrls[0] ?? "").trim();
+      if (img0) return img0;
+    }
+
+    // 4) fallback to first variant image
+    if (Array.isArray(s?.variants) && s.variants.length) {
+      const vimg = String(s.variants?.[0]?.image ?? "").trim();
+      if (vimg) return vimg;
+    }
+
+    return undefined;
+  };
+
   return rows.map((row: any) => {
     const c = row.category ?? {};
     const services = Array.isArray(row.services) ? row.services : [];
+
     return {
       category: {
         id: String(c.id ?? c._id ?? ""),
         name: String(c.name ?? ""),
         slug: String(c.slug ?? ""),
         order: Number.isFinite(Number(c.order)) ? Number(c.order) : 0,
-      } as CatalogCategory,
+      },
       services: services.map((s: any) => ({
-        id: String(s.id ?? s._id ?? ""), // ✅ ensure id
+        id: String(s.id ?? s._id ?? ""),
         name: String(s.name ?? ""),
         categoryId: String(s.categoryId ?? s.category_id ?? ""),
-        basePrice: Number(s.basePrice ?? 0),
-        image:
-          Array.isArray(s.images) && s.images[0]
-            ? String(s.images[0])
-            : undefined,
+        basePrice: Number(
+          s.basePrice ??
+            s.base_price ??
+            s.variants?.[0]?.absolutePrice ??
+            s.variants?.[0]?.price ??
+            0
+        ),
+        image: pickFirstImage(s), // ✅ FIXED
       })),
-    } as CategoryWithServices;
+    };
   });
 }
+
 
 export async function fetchService(
   idOrSlug: string

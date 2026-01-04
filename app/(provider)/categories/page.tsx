@@ -9,7 +9,7 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
-import { Plus, ChevronDown, ChevronRight, ImageIcon } from "lucide-react";
+import { Plus, ChevronDown, ChevronRight, ImageIcon, Loader2 } from "lucide-react";
 import CreateCategoryServiceDrawer from "@/app/components/categories/CreateCategoryServiceDrawer";
 import type { Category } from "@/types/catalog";
 import {
@@ -24,14 +24,31 @@ export default function CategoriesPage() {
   const [open, setOpen] = useState(false);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
+  // ✅ loader + error
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
   // NEW: service details sheet state
   const [serviceOpen, setServiceOpen] = useState(false);
   const [serviceId, setServiceId] = useState<string | null>(null);
 
+  async function load() {
+    setLoading(true);
+    setLoadError(null);
+    try {
+      const r = await fetchCategoriesWithServices();
+      setRows(r);
+    } catch (e: any) {
+      console.error("Failed to load categories with services:", e);
+      setLoadError(e?.message || "Failed to load.");
+      setRows([]);
+    } finally {
+      setLoading(false);
+    }
+  }
+
   useEffect(() => {
-    fetchCategoriesWithServices()
-      .then((r) => setRows(r))
-      .catch((e) => console.error("Failed to load categories with services:", e));
+    load();
   }, []);
 
   const categories: Category[] = useMemo(() => rows.map((r) => r.category), [rows]);
@@ -60,11 +77,12 @@ export default function CategoriesPage() {
     name: string;
     categoryId: string;
     basePrice: number;
+    image?: string;
   }) {
     setRows((prev) =>
       prev.map((r) =>
         r.category.id === svc.categoryId
-          ? { ...r, services: [{ ...svc, image: undefined }, ...r.services] }
+          ? { ...r, services: [{ ...svc }, ...r.services] }
           : r
       )
     );
@@ -111,99 +129,132 @@ export default function CategoriesPage() {
         </Sheet>
       </div>
 
-      {/* Categories list */}
-      <div className="bg-card border border-border rounded-xl overflow-hidden">
-        {rows.length === 0 ? (
-          <div className="p-6 text-sm text-black/60">No categories yet.</div>
-        ) : (
-          <ul className="divide-y divide-border">
-            {rows
-              .slice()
-              .sort(
-                (a, b) =>
-                  (a.category.order ?? 0) - (b.category.order ?? 0) ||
-                  a.category.name.localeCompare(b.category.name)
-              )
-              .map(({ category: c }) => {
-                const items = grouped.get(c.id) ?? [];
-                const isOpen = expanded.has(c.id);
-                return (
-                  <li key={c.id} className="p-0">
-                    {/* Category header */}
-                    <button
-                      type="button"
-                      onClick={() => toggle(c.id)}
-                      className="w-full px-4 py-3 flex items-center justify-between hover:bg-white/5"
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded bg-background border border-border grid place-items-center text-xs">
-                          {c.name.slice(0, 1).toUpperCase()}
-                        </div>
-                        <div>
-                          <div className="font-medium">{c.name}</div>
-                          <div className="text-[11px] text-white/50">
-                            Order {c.order ?? 0}
-                          </div>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <Badge
-                          variant="secondary"
-                          className="bg-white/10 border-border"
-                        >
-                          {items.length} service{items.length !== 1 ? "s" : ""}
-                        </Badge>
-                        {isOpen ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
-                      </div>
-                    </button>
+      {/* ✅ Loading state */}
+      {loading && (
+       <div className="bg-card border border-border rounded-xl p-6 flex items-center gap-3 text-sm text-black/70">
+  <Loader2 className="h-4 w-4 animate-spin" />
+  Loading categories & services...
+</div>
 
-                    {/* Services under category */}
-                    {isOpen && (
-                      <div className="px-4 pb-4">
-                        {items.length === 0 ? (
-                          <div className="text-xs text-white/60 border-t border-border/60 pt-3">
-                            No services under this category.
+      )}
+
+      {/* ✅ Error state */}
+      {!loading && loadError && (
+        <div className="bg-card border border-border rounded-xl p-6 space-y-3">
+          <div className="text-sm text-red-400">
+            Failed to load: {loadError}
+          </div>
+          <button
+            onClick={load}
+            className="inline-flex items-center gap-2 px-3 py-2 rounded bg-white/10 border border-border text-sm hover:bg-white/15"
+          >
+            Retry
+          </button>
+        </div>
+      )}
+
+      {/* Categories list */}
+      {!loading && !loadError && (
+        <div className="bg-card border border-border rounded-xl overflow-hidden">
+          {rows.length === 0 ? (
+            <div className="p-6 text-sm text-white/60">No categories yet.</div>
+          ) : (
+            <ul className="divide-y divide-border">
+              {rows
+                .slice()
+                .sort(
+                  (a, b) =>
+                    (a.category.order ?? 0) - (b.category.order ?? 0) ||
+                    a.category.name.localeCompare(b.category.name)
+                )
+                .map(({ category: c }) => {
+                  const items = grouped.get(c.id) ?? [];
+                  const isOpen = expanded.has(c.id);
+                  return (
+                    <li key={c.id} className="p-0">
+                      {/* Category header */}
+                      <button
+                        type="button"
+                        onClick={() => toggle(c.id)}
+                        className="w-full px-4 py-3 flex items-center justify-between hover:bg-white/5"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded bg-background border border-border grid place-items-center text-xs">
+                            {c.name.slice(0, 1).toUpperCase()}
                           </div>
-                        ) : (
-                          <div className="mt-3 grid md:grid-cols-2 lg:grid-cols-3 gap-3">
-                            {items.map((s) => (
-                              <button
-                                key={s.id}
-                                onClick={() => openServiceDetails(s.id)}
-                                className="flex gap-3 items-center rounded border border-border/60 p-2 bg-background text-left hover:bg-white/5"
-                              >
-                                <div className="w-14 h-14 rounded overflow-hidden border border-border/60 bg-black/20 grid place-items-center">
-                                  {s.image ? (
-                                    // eslint-disable-next-line @next/next/no-img-element
-                                    <img
-                                      src={s.image}
-                                      alt={s.name}
-                                      className="w-full h-full object-cover"
-                                    />
-                                  ) : (
-                                    <ImageIcon size={18} className="opacity-60" />
-                                  )}
-                                </div>
-                                <div className="min-w-0">
-                                  <div className="text-sm font-medium truncate">
-                                    {s.name}
-                                  </div>
-                                  <div className="text-[11px] text-white/60">
-                                    AED {Number(s.basePrice).toFixed(2)}
-                                  </div>
-                                </div>
-                              </button>
-                            ))}
+                          <div>
+                            <div className="font-medium">{c.name}</div>
+                            <div className="text-[11px] text-white/50">
+                              Order {c.order ?? 0}
+                            </div>
                           </div>
-                        )}
-                      </div>
-                    )}
-                  </li>
-                );
-              })}
-          </ul>
-        )}
-      </div>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <Badge
+                            variant="secondary"
+                            className="bg-white/10 border-border"
+                          >
+                            {items.length} service{items.length !== 1 ? "s" : ""}
+                          </Badge>
+                          {isOpen ? (
+                            <ChevronDown size={18} />
+                          ) : (
+                            <ChevronRight size={18} />
+                          )}
+                        </div>
+                      </button>
+
+                      {/* Services under category */}
+                      {isOpen && (
+                        <div className="px-4 pb-4">
+                          {items.length === 0 ? (
+                            <div className="text-xs text-white/60 border-t border-border/60 pt-3">
+                              No services under this category.
+                            </div>
+                          ) : (
+                            <div className="mt-3 grid md:grid-cols-2 lg:grid-cols-3 gap-3">
+                              {items.map((s) => (
+                                <button
+                                  key={s.id}
+                                  onClick={() => openServiceDetails(s.id)}
+                                  className="flex gap-3 items-center rounded border border-border/60 p-2 bg-background text-left hover:bg-white/5"
+                                >
+                                  <div className="w-14 h-14 rounded overflow-hidden border border-border/60 bg-black/20 grid place-items-center">
+                                    {s.image ? (
+                                      // eslint-disable-next-line @next/next/no-img-element
+                                      <img
+                                        src={s.image}
+                                        alt={s.name}
+                                        className="w-full h-full object-cover"
+                                        onError={(e) => {
+                                          (e.currentTarget as HTMLImageElement).src = "";
+                                        }}
+                                      />
+                                    ) : (
+                                      <ImageIcon size={18} className="opacity-60" />
+                                    )}
+                                  </div>
+                                  <div className="min-w-0">
+                                    <div className="text-sm font-medium truncate">
+                                      {s.name}
+                                    </div>
+                                    <div className="text-[11px] text-white/60">
+                                      AED {Number(s.basePrice).toFixed(2)}
+                                    </div>
+                                  </div>
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </li>
+                  );
+                })}
+            </ul>
+          )}
+        </div>
+      )}
 
       {/* Service details sheet */}
       <ServiceDetailsSheet
