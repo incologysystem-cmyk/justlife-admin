@@ -17,6 +17,8 @@ const navItems: NavItem[] = [
   { label: "Customers", href: "/admin/customers" },
   { label: "Bookings", href: "/admin/bookings" },
   { label: "Jobs / Orders", href: "/admin/jobs" },
+    { label: "Service Request", href: "/admin/services/requests" },
+
 ];
 
 export function Sidebar() {
